@@ -1,0 +1,22 @@
+[Unit]
+Description=LinkedIn Jobs Scraper dashboard 
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=jobsscrap
+Group=jobsscrap
+WorkingDirectory=/opt/jobsscrap/dashboard
+EnvironmentFile=/etc/jobsscrap/env
+# GMAIL_USER, GMAIL_APP_PASSWORD, MAIL_ALLOWED_USERS; kept apart because setup-server.sh rewrites env.
+EnvironmentFile=-/etc/jobsscrap/gmail.env
+ExecStart=/opt/jobsscrap/venv/bin/uvicorn app:app --host 127.0.0.1 --port 8096 --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

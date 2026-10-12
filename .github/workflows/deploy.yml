@@ -1,0 +1,73 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # A syntax error here would restart-loop the dashboard service on the box.
+      - name: Compile Python
+        run: python3 -m py_compile dashboard/app.py agent/agent.py agent/parser.py whatsapp/linkedin_images.py
+      - name: Check shell scripts
+        run: bash -n deploy/setup-server.sh deploy/jobsscrap-deploy.sh
+      - name: Check dashboard JavaScript
+        run: |
+          python3 -c "import re,sys; sys.stdout.write(re.search(r'<script>(.*)</script>', open('dashboard/static/index.html', encoding='utf-8').read(), re.S).group(1))" > /tmp/dash.js
+          node --check /tmp/dash.js
+
+  deploy:
+    name: Deploy
+    needs: validate
+    if: github.ref == 'refs/heads/main' && vars.AWS_DEPLOY_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    concurrency:
+      group: jobsscrap-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Run the deployer over SSM
+        run: |
+          set -euo pipefail
+          # SSM runs this under dash: keep it POSIX.
+          cat > remote.sh <<REMOTE
+          set -eu
+          export GITHUB_RUN_ID='${GITHUB_RUN_ID}'
+          /usr/local/bin/jobsscrap-deploy.sh
+          test "\$(git -C /opt/jobsscrap/src rev-parse HEAD)" = '${GITHUB_SHA}'
+          REMOTE
+
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name AWS-RunShellScript \
+            --comment "jobsscrap deploy ${GITHUB_SHA:0:7}" \
+            --parameters "$(jq -n --arg s "$(cat remote.sh)" '{commands: ($s | split("\n"))}')" \
+            --query Command.CommandId --output text)
+          echo "SSM command: $CMD_ID"
+          aws ssm wait command-executed --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" || true
+
+          echo "::group::Remote output"
+          aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" --query StandardOutputContent --output text
+          aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" --query StandardErrorContent --output text
+          echo "::endgroup::"
+
+          STATUS=$(aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" --query Status --output text)
+          echo "Deploy status: $STATUS"
+          [ "$STATUS" = "Success" ]

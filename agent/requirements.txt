@@ -1,0 +1,4 @@
+mcp
+psycopg[binary]
+boto3
+tzdata

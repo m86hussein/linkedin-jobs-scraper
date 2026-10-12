@@ -1,0 +1,1442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LinkedIn Jobs Scraper</title>
+<style>
+  :root { --bg:#0f1115; --card:#181b22; --muted:#8a93a6; --text:#e6e9ef; --ok:#2ea043; --warn:#d29922; --bad:#f85149; --accent:#4c8dff; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid #262b36; }
+  h1 { font-size:18px; margin:0; }
+  main { padding:16px 20px; display:grid; gap:16px; grid-template-columns: 380px 1fr; }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+  body.sidebar-hidden main { grid-template-columns: 1fr; }
+  body.sidebar-hidden #sidebar { display:none !important; }
+  .brand { display:flex; align-items:center; gap:12px; }
+  #sidebarBtn { background:transparent; border:1px solid #2a2f3a; color:var(--muted); padding:5px 10px; font-size:13px; font-weight:500; }
+  #sidebarBtn:hover { color:var(--text); }
+  .card { background:var(--card); border:1px solid #262b36; border-radius:10px; padding:14px 16px; }
+  .card h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 10px; }
+  .card > h2 { cursor:pointer; user-select:none; display:flex; justify-content:space-between; align-items:center; }
+  .card > h2::after { content:'\25BE'; font-size:14px; transition:transform .15s; }
+  .card.collapsed > h2 { margin:0; }
+  .card.collapsed > h2::after { transform:rotate(-90deg); }
+  .card.collapsed > :not(h2) { display:none !important; }
+  .badge { display:inline-block; padding:3px 10px; border-radius:999px; font-weight:600; font-size:12px; background:#2a2f3a; }
+  .badge.running, .badge.searching, .badge.pausing, .badge.starting, .badge.browsing { background:rgba(46,160,67,.2); color:#56d364; }
+  .badge.waiting { background:rgba(76,141,255,.2); color:#79a8ff; }
+  .badge.stopped, .badge.offline { background:#2a2f3a; color:var(--muted); }
+  .badge.blocked, .badge.error { background:rgba(248,81,73,.2); color:#ff7b72; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; background:var(--bad); }
+  .dot.on { background:var(--ok); }
+  dl { display:grid; grid-template-columns: 130px 1fr; gap:6px 10px; margin:0; }
+  dt { color:var(--muted); } dd { margin:0; word-break:break-word; }
+  .btns { display:flex; flex-wrap:wrap; gap:10px; margin:12px 0 4px; }
+  button { border:0; border-radius:8px; padding:9px 18px; font-weight:600; cursor:pointer; color:#fff; }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  .start { background:var(--ok); } .stop { background:var(--bad); } .test { background:var(--accent); } .now { background:#b7791f; }
+  .err { color:#ff7b72; white-space:pre-wrap; }
+  .stats { display:grid; grid-template-columns: repeat(5,1fr); gap:8px; }
+  .stat { background:#11141a; border-radius:8px; padding:10px; text-align:center; }
+  .stat b { display:block; font-size:22px; }
+  .stat span { color:var(--muted); font-size:12px; }
+  .stat b .plus { color:#4ade80; font-size:15px; margin-left:4px; }
+  #events { max-height:340px; overflow:auto; font:12px/1.5 ui-monospace, Consolas, monospace; }
+  #events div { padding:2px 0; border-bottom:1px solid #1f2430; }
+  #events .error { color:#ff7b72; } #events .warn { color:var(--warn); }
+  .toolbar { display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
+  input[type=search] { flex:1; min-width:200px; background:#11141a; color:var(--text); border:1px solid #2a2f3a; border-radius:8px; padding:8px 10px; }
+  .toolbar select { background:#11141a; color:var(--text); border:1px solid #2a2f3a; border-radius:8px; padding:6px 8px; font:inherit; }
+  #posts { display:grid; gap:12px; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); align-items:start; }
+  .job { background:#11141a; border:1px solid #262b36; border-radius:10px; padding:12px 14px; display:flex; flex-direction:column; gap:6px; }
+  .job:hover { border-color:#3a4150; }
+  .job .title { font-weight:600; font-size:15px; line-height:1.3; }
+  .job .where { color:var(--text); font-size:13px; }
+  .job .meta { color:var(--muted); font-size:12px; }
+  .job .body { white-space:pre-wrap; font-size:13px; color:#c9cfdb; max-height:6.6em; overflow:hidden; cursor:pointer; }
+  .job .body.open { max-height:none; }
+  .job .links { display:flex; flex-wrap:wrap; gap:4px 12px; margin-top:2px; }
+  .job a { color:var(--accent); text-decoration:none; font-size:13px; word-break:break-all; }
+  .dcwarn { display:inline-block; margin-top:3px; padding:1px 7px; border-radius:6px; font-size:12px; background:rgba(248,81,73,.18); color:#ff7b72; }
+  .hostline { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .empty { color:var(--muted); padding:30px 0; text-align:center; grid-column:1/-1; }
+  .viewtoggle { display:inline-flex; border:1px solid #2a2f3a; border-radius:8px; overflow:hidden; margin-left:auto; }
+  .viewtoggle button { background:transparent; color:var(--muted); border-radius:0; padding:6px 14px; font-weight:500; }
+  .viewtoggle button.on { background:#2a2f3a; color:var(--text); }
+  #posts.grid { display:block; overflow:auto; max-height:calc(100vh - 24px); }
+  table.jobs { width:100%; border-collapse:collapse; font-size:13px; }
+  table.jobs th { text-align:left; color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.04em;
+                  padding:8px 10px; border-bottom:1px solid #2a2f3a; position:sticky; top:0; z-index:2; background:var(--card); white-space:nowrap; }
+  table.jobs td { padding:9px 10px; border-bottom:1px solid #1f2430; vertical-align:top; }
+  table.jobs tr:hover td { background:#141821; }
+  table.jobs th.sortable { cursor:pointer; user-select:none; }
+  table.jobs th.sortable:hover, table.jobs th.on { color:var(--text); }
+  .colgrip { position:absolute; top:0; right:0; width:8px; height:100%; cursor:col-resize; touch-action:none; }
+  .colgrip::after { content:''; position:absolute; right:0; top:25%; height:50%; border-right:1px solid #2a2f3a; }
+  .colgrip:hover::after, .colgrip.drag::after { border-right:2px solid var(--accent); top:0; height:100%; }
+  table.jobs.fixed { table-layout:fixed; width:auto; }
+  table.jobs.fixed th { overflow:hidden; text-overflow:ellipsis; }
+  table.jobs.fixed td { overflow:hidden; text-overflow:ellipsis; overflow-wrap:anywhere; }
+  table.jobs.fixed .person, table.jobs.fixed .role { min-width:0; }
+  table.jobs.fixed .person .headline { max-width:100%; }
+  table.jobs a { color:var(--accent); text-decoration:none; }
+  table.jobs tbody tr:not(.textrow) > td { white-space:nowrap; vertical-align:middle; padding:6px 10px; }
+  table.jobs tbody tr:not(.textrow) .tag { margin:0 0 0 6px; }
+  table.jobs .avatar { display:inline-grid; width:22px; height:22px; font-size:10px; vertical-align:middle; margin-right:6px; }
+  table.jobs .person-name { font-weight:600; }
+  table.jobs .expand { vertical-align:middle; }
+  a.fallback { color:var(--muted) !important; border-bottom:1px dashed #4a5263; }
+  .flag { width:24px; height:16px; object-fit:cover; border-radius:2px; vertical-align:middle; box-shadow:0 0 0 1px #2a2f3a; }
+  .cc { font:11px ui-monospace, Consolas, monospace; color:var(--muted); margin-left:6px; text-transform:uppercase; }
+  .person { display:flex; gap:8px; align-items:center; min-width:190px; }
+  .avatar { flex:none; width:30px; height:30px; border-radius:50%; display:grid; place-items:center; font-weight:700; font-size:12px; color:#fff; }
+  .person .name { font-weight:600; }
+  .person .headline { color:var(--muted); font-size:12px; max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .role { font-weight:600; min-width:200px; }
+  .expand { flex:none; width:20px; height:20px; padding:0; margin-right:6px; border:1px solid #2a2f3a; border-radius:5px; background:transparent;
+            color:var(--accent); font:600 14px/1 ui-monospace, Consolas, monospace; cursor:pointer; vertical-align:top; }
+  .expand:hover { border-color:var(--accent); }
+  table.jobs tr.textrow td { white-space:pre-wrap; font-size:13px; color:#c9cfdb; background:#0e1116; padding:10px 14px 14px 46px; }
+  .jobdesc { margin-top:12px; padding-top:10px; border-top:1px dashed #2a2f3a; }
+  .jobdesc-h { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#7d8590; margin-bottom:6px; }
+  .nowrap { white-space:nowrap; }
+  .queries { margin:10px 0 0; padding-left:22px; }
+  .queries li { padding:2px 0; }
+  .queries li.current { color:#56d364; font-weight:600; }
+  .tag { display:inline-block; font-size:11px; padding:1px 7px; border-radius:6px; background:#2a2f3a; color:var(--muted); margin-right:6px; }
+  .tag.new { background:rgba(46,160,67,.2); color:#56d364; }
+  .tag.saudi { background:rgba(0,108,53,.3); color:#7ee2a8; margin-top:4px; }
+  .muted { color:var(--muted); }
+  .who { text-align:right; font-size:13px; line-height:1.45; }
+  .who .email { font-weight:600; }
+  .signout { margin-left:8px; padding:0 8px; border:1px solid #2a2f3a; border-radius:6px; font-size:12px; color:var(--muted); text-decoration:none; }
+  .signout:hover { color:var(--text); }
+  .archlink { padding:4px 12px; border:1px solid #2a2f3a; border-radius:8px; color:var(--accent); text-decoration:none; font-size:13px; }
+  .archlink:hover { border-color:var(--accent); }
+  .build { font:12px ui-monospace, Consolas, monospace; color:var(--muted); }
+  .build a { color:#a5a2ff; }
+  .build .since { color:var(--muted); }
+  .build a.newbuild { color:#ffb86b; font-weight:600; }
+  [hidden] { display:none !important; }
+  .tabs { display:inline-flex; border:1px solid #2a2f3a; border-radius:8px; overflow:hidden; }
+  .tabs button { background:transparent; color:var(--muted); border-radius:0; padding:6px 14px; font-weight:500; }
+  .tabs button.on { background:#2a2f3a; color:var(--text); }
+  #compose { display:none; padding:16px 20px; gap:12px 16px; grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); height:calc(100vh - 70px); }
+  .pickbar { grid-column:1 / -1; display:flex; gap:8px; align-items:center; }
+  #mPick { flex:1; min-width:0; background:#11141a; color:var(--text); border:1px solid #2a2f3a; border-radius:8px; padding:7px 10px; font:inherit; }
+  .pickbar label { white-space:nowrap; font-size:13px; }
+  body.tab-compose main { display:none; }
+  body.tab-compose #compose { display:grid; }
+  @media (max-width: 1000px) { body.tab-compose #compose { grid-template-columns:1fr; height:auto; } }
+  .pane { background:var(--card); border:1px solid #262b36; border-radius:10px; padding:14px 16px; display:flex; flex-direction:column; gap:10px; min-height:0; }
+  .pane h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0; }
+  .mform { display:flex; flex-direction:column; gap:10px; flex:1; min-height:0; }
+  .mfields { display:grid; grid-template-columns:70px 1fr; gap:8px 10px; align-items:center; }
+  .mfields label, .mfields .lbl { color:var(--muted); }
+  .mfields input { width:100%; background:#11141a; color:var(--text); border:1px solid #2a2f3a; border-radius:8px; padding:7px 10px; font:inherit; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:12px; }
+  .chip { background:#2a2f3a; color:var(--text); border-radius:999px; padding:2px 10px; font-weight:500; font-size:12px; }
+  .rtbar { display:flex; gap:4px; flex-wrap:wrap; }
+  .rtbar button { background:#11141a; border:1px solid #2a2f3a; color:var(--text); padding:4px 10px; font-weight:600; border-radius:6px; }
+  .editor { flex:1; min-height:240px; overflow:auto; background:#fff; color:#1f2328; border-radius:8px; padding:14px 16px; font:14px/1.55 Arial, Helvetica, sans-serif; outline:none; }
+  .editor:focus { box-shadow:0 0 0 2px var(--accent); }
+  .editor a { color:#0a66c2; }
+  .editor p { margin:0 0 10px; }
+  .editor ul, .editor ol { margin:0 0 10px; padding-left:24px; }
+  .editor li > ul, .editor li > ol { margin:2px 0 4px; }
+  .attach { display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:13px; }
+  .attach a { color:var(--accent); text-decoration:none; }
+  .linkbtn { background:transparent; border:1px solid #2a2f3a; color:var(--muted); padding:4px 10px; font-weight:500; border-radius:6px; cursor:pointer; font-size:12px; }
+  .linkbtn:hover { color:var(--text); }
+  .linkbtn:disabled { opacity:.4; cursor:default; }
+  .sendrow { display:flex; align-items:center; gap:10px; }
+  #mStatus { margin-right:auto; font-size:13px; }
+  #mSend.arm { background:#d29922; }
+  #mStatus.ok { color:#56d364; } #mStatus.bad { color:#ff7b72; white-space:pre-wrap; }
+  .sentnote, .warnnote, .ainote, .skipnote { border-radius:8px; padding:6px 10px; font-size:13px; }
+  .skipnote { background:rgba(219,109,40,.15); color:#ffa657; border:1px dashed rgba(255,166,87,.5); font-weight:600; }
+  .sentnote { background:rgba(46,160,67,.12); color:#56d364; }
+  .warnnote { background:rgba(210,153,34,.15); color:var(--warn); }
+  .ainote { background:rgba(163,113,247,.15); color:#d2a8ff; }
+  #pHead { display:flex; flex-direction:column; gap:4px; }
+  #pHead .title { font-weight:600; font-size:15px; }
+  #pHead .links { display:flex; gap:4px 12px; flex-wrap:wrap; }
+  #pHead a { color:var(--accent); text-decoration:none; font-size:13px; }
+  #pToggle { margin-left:0; align-self:flex-start; }
+  #pFrame { flex:1; width:100%; min-height:400px; border:0; border-radius:8px; background:#fff; }
+  #pText { flex:1; overflow:auto; white-space:pre-wrap; background:#11141a; border-radius:8px; padding:12px 14px; color:#c9cfdb; font-size:14px; }
+  .tag.sent { background:rgba(46,160,67,.2); color:#56d364; margin-top:4px; }
+  .tag.skipped { background:rgba(219,109,40,.2); color:#ffa657; font-weight:600; margin-top:4px; }
+  .tag.freq { background:rgba(88,166,255,.18); color:#79c0ff; margin-top:4px; }
+  .tag.fit { background:rgba(63,185,80,.15); color:#56d364; margin-top:4px; }
+  .tag.unfit { background:rgba(248,81,73,.15); color:#ff7b72; margin-top:4px; }
+  .tag.match { font-weight:600; }
+  .tag.match.hi { background:rgba(63,185,80,.15); color:#56d364; }
+  .tag.match.mid { background:rgba(210,153,34,.15); color:#e3b341; }
+  .tag.match.lo { background:rgba(248,81,73,.15); color:#ff7b72; }
+  .pager { display:flex; gap:10px; align-items:center; justify-content:flex-end; margin:8px 0; font-size:13px; }
+  .pager:empty { display:none; }
+  .tag.li { background:rgba(10,102,194,.25); color:#70b5f9; }
+  .tag.tg { background:rgba(34,158,217,.2); color:#5ec8ff; }
+  .tag.mode { margin-left:6px; }
+  .tag.mode.onsite { background:rgba(210,153,34,.2); color:#e3b341; }
+  .tag.mode.hybrid { background:rgba(163,113,247,.2); color:#d2a8ff; }
+  .tag.mode.remote { background:rgba(46,160,67,.2); color:#56d364; }
+  #salaries { display:none; padding:16px 20px; }
+  body.tab-salaries main, body.tab-salaries #compose { display:none; }
+  body.tab-salaries #salaries { display:block; }
+  .sgrid { display:grid; grid-template-columns:minmax(180px,260px) 70px minmax(260px,1fr) 170px 150px; gap:0 14px; align-items:center; }
+  .sgrid > .h { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.05em; padding:6px 10px 6px 0; border-bottom:1px solid #262b36; position:relative; }
+  #sTable { overflow-x:auto; }
+  .srow { display:contents; cursor:pointer; }
+  .srow > div { padding:9px 0; border-bottom:1px solid #1f2430; }
+  .srow:hover > div { background:#1d212a; }
+  .srow .nm { font-weight:600; }
+  .srow .nm::before { content:'\25B8'; color:var(--muted); margin-right:6px; display:inline-block; transition:transform .15s; }
+  .srow.open .nm::before { transform:rotate(90deg); }
+  .srow .sc { font-weight:400; white-space:nowrap; }
+  .srow[hidden] { display:none; }
+  .srow .sall { font-weight:400; font-size:12px; }
+  .srow.sub .nm { padding-left:22px; }
+  .srow.sub > div { background:#13161d; border-bottom-color:#1a1e27; }
+  .srow.sub:hover > div { background:#1d212a; }
+  .sbar { position:relative; height:16px; background:#11141a; border-radius:4px; }
+  .sbar .rng { position:absolute; top:7px; height:2px; background:#4c8dff; }
+  .sbar .iqr { position:absolute; top:3px; height:10px; background:rgba(76,141,255,.55); border-radius:3px; }
+  .sbar .med { position:absolute; top:1px; width:2px; height:14px; background:#fff; }
+  .sbar .est { position:absolute; top:5px; height:6px; border:1px dashed #d2a8ff; border-radius:3px; background:rgba(163,113,247,.15); }
+  .saxis { display:flex; justify-content:space-between; color:var(--muted); font-size:11px; }
+  .sposts { grid-column:1 / -1; background:#11141a; border-radius:8px; margin:4px 0 10px; padding:6px 12px; }
+  .sposts div { display:flex; gap:10px; justify-content:space-between; padding:5px 0; border-bottom:1px solid #1f2430; font-size:13px; }
+  .sposts div:last-child { border-bottom:0; }
+  .sposts .pay { white-space:nowrap; font-weight:600; }
+  .sposts .pay.est { color:#d2a8ff; font-weight:500; }
+  .sposts a { color:var(--accent); text-decoration:none; }
+  .slegend { display:flex; gap:18px; flex-wrap:wrap; color:var(--muted); font-size:12px; margin:6px 0 12px; }
+  .slegend i { display:inline-block; width:22px; height:8px; margin-right:6px; vertical-align:middle; border-radius:3px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <button id="sidebarBtn" type="button" aria-controls="sidebar"></button>
+    <h1>LinkedIn Jobs Scraper</h1>
+    <div class="tabs" role="tablist">
+      <button type="button" data-tab="jobs" class="on">Jobs</button>
+      <button type="button" data-tab="compose">Compose email</button>
+      <button type="button" data-tab="salaries">Salaries</button>
+    </div>
+  </div>
+  <div class="who">
+    <div><span id="userEmail" class="email" title="Signed in"></span><a class="signout" href="/oauth2/sign_out?rd=%2Fsigned-out">Sign out</a></div>
+    <div id="build" class="build"></div>
+  </div>
+</header>
+<main>
+  <section id="sidebar" style="display:grid; gap:16px; align-content:start">
+    <div class="card">
+      <h2>Scraper</h2>
+      <div><span id="agentDot" class="dot"></span><span id="agentOnline">agent offline</span> &nbsp; <span id="stateBadge" class="badge">-</span></div>
+      <div class="btns">
+        <button id="startBtn" class="start">Start</button>
+        <button id="testBtn" class="test" title="Run now, even outside active hours; stops after 5 minutes or 100 posts">Test run</button>
+        <button id="nowBtn" class="now" title="One full cycle right now, even outside active hours, before the next scheduled cycle or past the daily cap; then back to the normal schedule">Run now</button>
+        <button id="stopBtn" class="stop">Stop</button>
+      </div>
+      <dl>
+        <dt>Desired</dt><dd id="desired">-</dd>
+        <dt>Current search</dt><dd id="query">-</dd>
+        <dt>Step</dt><dd id="step">-</dd>
+        <dt>Cycle started</dt><dd id="cycleStart">-</dd>
+        <dt>Cycle posts</dt><dd id="cyclePosts">-</dd>
+        <dt>Searches today</dt><dd id="searchesToday">-</dd>
+        <dt>Next cycle</dt><dd id="nextCycle">-</dd>
+        <dt>LinkedIn account</dt><dd id="linkedinAccount">-</dd>
+        <dt>Agent host / IP</dt><dd id="host">-</dd>
+        <dt>Heartbeat</dt><dd id="heartbeat">-</dd>
+      </dl>
+      <div id="lastError" class="err"></div>
+    </div>
+    <div class="card collapsed" data-panel="criteria">
+      <h2>Search criteria</h2>
+      <dl id="criteria"><dt>-</dt><dd>agent has not reported yet</dd></dl>
+      <ol id="queries" class="queries"></ol>
+    </div>
+    <div class="card">
+      <h2>Collected</h2>
+      <div class="stats">
+        <div class="stat"><b id="cTotal">-</b><span>total</span></div>
+        <div class="stat"><b id="cHiring">-</b><span>hiring</span></div>
+        <div class="stat"><b id="cToday">-</b><span>new today</span></div>
+        <div class="stat"><b id="c24">-</b><span>last 24h</span></div>
+        <div class="stat" title="Distinct addresses in ALL collected posts, before any filter: most are in posts Haiku judged not a fit, not a job offer, or not hiring. The Compose counter only counts matching offers."><b id="cEmails">-</b><span>emails found</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Activity</h2>
+      <div id="events"></div>
+    </div>
+  </section>
+  <section class="card">
+    <h2>Posts</h2>
+    <div class="toolbar">
+      <input id="q" type="search" placeholder="Filter by title, company, location, text...">
+      <label><input id="hiringOnly" type="checkbox" checked> hiring only</label>
+      <label title="Only real job offers that Haiku judged a fit for the search criteria (AI / architecture / CTO / digital / telecom leadership); hides job seekers, candidate spotlights and other fields. Posts not screened yet fall back to the role patterns."><input id="myRoles" type="checkbox" checked> matching offers only</label>
+      <label title="Saudi, Qatar, Oman and Egypt jobs (Egypt on-site or remote), remote/MENA roles not tied to another country, and roles anywhere that sponsor a visa"><input id="ksaOnly" type="checkbox" checked> KSA, Qatar, Oman, Egypt &amp; remote only</label>
+      <select id="egFilter" title="Egypt jobs by work mode. Hybrid counts as on-site; a post that doesn't mention remote or hybrid is taken as on-site.">
+        <option value="all">Egypt: all</option>
+        <option value="onsite">Egypt on-site only</option>
+        <option value="remote">Egypt remote only</option>
+        <option value="hide">Hide Egypt</option>
+      </select>
+      <select id="saudiFilter" title="Posts that say the role is for Saudi nationals only (e.g. &quot;Saudi Nationals Only&quot;, &quot;Nationality: Saudi&quot;, Saudization, للسعوديين فقط)">
+        <option value="all">All nationalities</option>
+        <option value="only">Saudi nationals only</option>
+        <option value="hide">Hide Saudi-nationals-only</option>
+      </select>
+      <select id="srcFilter" title="Where the post was found">
+        <option value="all">LinkedIn + Telegram</option>
+        <option value="linkedin">LinkedIn only</option>
+        <option value="telegram">Telegram only</option>
+      </select>
+      <label title="People who posted 2 or more of the jobs collected"><input id="freqOnly" type="checkbox"> frequent posters</label>
+      <span id="postCount" class="muted"></span>
+      <div class="viewtoggle" role="group" aria-label="View">
+        <button type="button" data-view="grid">Grid</button>
+        <button type="button" data-view="cards">Cards</button>
+      </div>
+    </div>
+    <div id="pagerTop" class="pager"></div>
+    <div id="posts"></div>
+    <div id="pager" class="pager"></div>
+  </section>
+</main>
+<section id="salaries">
+  <div class="card">
+    <h2>Salaries by role</h2>
+    <div class="toolbar">
+      <label>Group by <select id="sGroup">
+        <option value="family">Title family</option>
+        <option value="sector">Sector / domain</option>
+        <option value="seniority">Seniority</option>
+        <option value="country">Country</option>
+      </select></label>
+      <label title="Pay differs a lot between countries, so by default each group is split per country">Country <select id="sCountry">
+        <option value="split">Split by country</option>
+        <option value="all">All countries combined</option>
+      </select></label>
+      <label title="Only offers Haiku judged a fit for your criteria"><input id="sMatch" type="checkbox"> matching offers only</label>
+      <label title="When a post states no pay, Haiku estimates typical gross monthly pay for the role, seniority and location. It is a model estimate, not data from the post."><input id="sEst" type="checkbox" checked> show Haiku estimates</label>
+      <span id="sInfo" class="muted"></span>
+    </div>
+    <div class="slegend"><span><i style="background:rgba(76,141,255,.55)"></i>stated pay: middle 50% (line = min–max, white = median)</span>
+      <span><i style="border:1px dashed #d2a8ff;background:rgba(163,113,247,.15)"></i>Haiku estimate (median of estimates; not from posts)</span>
+      <span>All figures are gross USD per month: yearly ÷ 12, weekly × 4.33, daily × 22, hourly × 160 · approximate exchange rates</span></div>
+    <div id="sTable"></div>
+  </div>
+</section>
+<section id="compose">
+  <div class="pickbar">
+    <button type="button" id="mPrev" class="linkbtn" title="Previous post">‹ Prev</button>
+    <select id="mPick" aria-label="Post"></select>
+    <button type="button" id="mNext" class="linkbtn" title="Next post">Next ›</button>
+    <label class="muted"><input type="checkbox" id="mWithEmail" checked> with email only</label>
+    <label class="muted" title="Hide posts already emailed, including posts whose address or author you emailed about another post"><input type="checkbox" id="mUnsent"> unsent only</label>
+    <label class="muted"><input type="checkbox" id="mShowSkipped"> show skipped</label>
+    <label class="muted" title="Also list job offers Haiku judged not a fit (marked ✗). Hover the ✗ tag on the post to see why."><input type="checkbox" id="mRejected"> include Haiku-rejected</label>
+    <span id="mLeft" class="tag"></span>
+  </div>
+  <div class="pane">
+    <h2>Email</h2>
+    <div id="mEmpty" class="muted">Pick a post above, or click an email address in the Jobs tab.</div>
+    <div id="mForm" class="mform" hidden>
+      <div id="mNote"></div>
+      <div class="mfields">
+        <span class="lbl">From</span><div id="mFrom" class="muted">-</div>
+        <label for="mTo">To</label><input id="mTo" type="text" autocomplete="off" placeholder="recipient@example.com">
+        <span></span><div id="mChips" class="chips"></div>
+        <label for="mCc">Cc</label><input id="mCc" type="text" autocomplete="off">
+        <label for="mSubject">Subject</label><input id="mSubject" type="text">
+      </div>
+      <div id="rtbar" class="rtbar">
+        <button type="button" data-cmd="bold" title="Bold"><b>B</b></button>
+        <button type="button" data-cmd="italic" title="Italic"><i>I</i></button>
+        <button type="button" data-cmd="underline" title="Underline"><u>U</u></button>
+        <button type="button" data-cmd="insertUnorderedList" title="Bulleted list">• List</button>
+        <button type="button" data-cmd="insertOrderedList" title="Numbered list">1. List</button>
+        <button type="button" data-cmd="createLink" title="Link the selected text">Link</button>
+        <button type="button" data-cmd="removeFormat" title="Clear formatting">Clear</button>
+      </div>
+      <div id="mBody" class="editor" contenteditable="true" spellcheck="true"></div>
+      <div class="attach">📎 <span id="mAttach"></span>
+        <label class="linkbtn">Replace…<input id="mFile" type="file" accept=".pdf,.doc,.docx" hidden></label>
+        <button type="button" id="mDetach" class="linkbtn">Remove</button>
+      </div>
+      <div class="sendrow">
+        <span id="mStatus"></span>
+        <button type="button" id="mPrev2" class="linkbtn" title="Previous post">‹ Prev</button>
+        <button type="button" id="mNext2" class="linkbtn" title="Next post">Next ›</button>
+        <button type="button" id="mSkip" class="linkbtn" title="Not interested: hide this post and open the next one">Skip ›</button>
+        <button type="button" id="mReset" class="linkbtn">Reset draft</button>
+        <button type="button" id="mSend" class="start">Send</button>
+      </div>
+    </div>
+  </div>
+  <div class="pane">
+    <div id="pHead"><h2>Post</h2></div>
+    <div id="pToggle" class="viewtoggle" role="group" aria-label="Post view" hidden>
+      <button type="button" data-pv="embed">LinkedIn</button>
+      <button type="button" data-pv="text">Text</button>
+    </div>
+    <iframe id="pFrame" title="LinkedIn post" referrerpolicy="strict-origin-when-cross-origin" hidden></iframe>
+    <div id="pText" hidden></div>
+  </div>
+</section>
+<script>
+const $ = id => document.getElementById(id);
+// All times are shown in Egypt time regardless of the viewer's machine zone.
+const CAIRO = new Intl.DateTimeFormat('en-US', { timeZone: 'Africa/Cairo', day: '2-digit', month: 'short', year: 'numeric',
+  hour: '2-digit', minute: '2-digit', hour12: true });
+const CAIRO_SECS = new Intl.DateTimeFormat('en-US', { timeZone: 'Africa/Cairo', day: '2-digit', month: 'short',
+  hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+const CAIRO_TIME = new Intl.DateTimeFormat('en-US', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit', hour12: true });
+const cairoTime = t => t ? CAIRO.format(new Date(t)) : '-';
+const fmt = cairoTime;
+const ago = t => { if (!t) return '-'; const s = Math.round((Date.now() - new Date(t)) / 1000);
+  return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s/60)}m ago` : s < 86400 ? `${Math.round(s/3600)}h ago` : `${Math.round(s/86400)}d ago`; };
+const safeUrl = u => (typeof u === 'string' && u.startsWith('https://www.linkedin.com/')) ? u : null;
+function el(tag, props = {}, ...kids) { const e = document.createElement(tag); Object.assign(e, props); kids.flat().forEach(k => k != null && e.append(k)); return e; }
+
+window.addEventListener('error', e => console.error('[dashboard] uncaught:', e.error || e.message));
+window.addEventListener('unhandledrejection', e => console.error('[dashboard] unhandled promise:', e.reason));
+
+async function api(path, opts) {
+  const method = (opts && opts.method) || 'GET';
+  // A deploy restarts the server for ~1 s; retry those gaps, but never re-send an email.
+  const retries = path === '/api/send' ? 0 : 3;
+  let r;
+  for (let attempt = 0; ; attempt++) {
+    try { r = await fetch(path, { credentials: 'same-origin', ...opts }); }
+    catch (e) { console.error(`[api] ${method} ${path} network error:`, e); throw e; }
+    if (![502, 503].includes(r.status) || attempt >= retries) break;
+    console.warn(`[api] ${method} ${path} ${r.status}, server restarting? retry ${attempt + 1}/${retries}`);
+    await new Promise(res => setTimeout(res, 1000 * (attempt + 1)));
+  }
+  if (r.status === 401) { console.warn(`[api] ${method} ${path} 401, reloading to sign in`); location.reload(); return null; }
+  if (!r.ok) {
+    const body = await r.text();
+    console.error(`[api] ${method} ${path} ${r.status}:`, body);
+    if (/^\s*</.test(body)) throw new Error(`${r.status} ${r.statusText || 'error'}: the server is restarting or unreachable. Try again in a few seconds.`);
+    throw new Error(`${r.status} ${body}`);
+  }
+  return r.json();
+}
+
+// View settings live in localStorage and are mirrored per user on the server, so they follow you to any browser.
+const pushPrefs = (() => {
+  let t;
+  return () => { clearTimeout(t); t = setTimeout(() => api('/api/prefs', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...localStorage }) }).catch(() => {}), 800); };
+})();
+for (const f of ['setItem', 'removeItem']) {
+  const orig = Storage.prototype[f];
+  Storage.prototype[f] = function (...a) { orig.apply(this, a); if (this === localStorage) pushPrefs(); };
+}
+api('/api/prefs').then(server => {
+  if (!server) return;
+  if (!Object.keys(server).length) { if (localStorage.length) pushPrefs(); return; }
+  const local = { ...localStorage };
+  const same = Object.keys(server).length === Object.keys(local).length && Object.entries(server).every(([k, v]) => local[k] === v);
+  if (same || sessionStorage.getItem('prefsApplied')) return;
+  localStorage.clear();
+  Object.entries(server).forEach(([k, v]) => localStorage.setItem(k, v));
+  sessionStorage.setItem('prefsApplied', '1');
+  location.reload();
+}).catch(() => {});
+
+async function loadStatus() {
+  const d = await api('/api/status'); if (!d) return;
+  const s = d.state;
+  const shown = d.online ? s.agent_state : 'offline';
+  $('agentDot').className = 'dot' + (d.online ? ' on' : '');
+  $('agentOnline').textContent = d.online ? 'agent online' : 'agent offline';
+  $('stateBadge').textContent = shown; $('stateBadge').className = 'badge ' + shown;
+  $('desired').textContent = `${s.desired_state}${s.run_now ? ' (run now requested)' : ''}${s.run_until ? ` (test until ${CAIRO_TIME.format(new Date(s.run_until))} or ${s.run_max_posts} posts)` : ''} by ${s.desired_by || '-'}, ${ago(s.desired_at)}`;
+  $('query').textContent = s.current_query || '-';
+  $('step').textContent = s.current_step || '-';
+  $('cycleStart').textContent = fmt(s.cycle_started_at);
+  $('cyclePosts').textContent = `${s.cycle_posts_seen} seen, ${s.cycle_posts_new} new`;
+  $('searchesToday').textContent = s.searches_today;
+  $('nextCycle').textContent = !s.next_cycle_at && ['starting', 'searching', 'pausing', 'browsing'].includes(shown) ? 'after this cycle' : fmt(s.next_cycle_at);
+  $('linkedinAccount').textContent = s.linkedin_account || '-';
+  renderHost(s);
+  $('heartbeat').textContent = ago(s.agent_heartbeat_at);
+  $('lastError').textContent = s.last_error ? 'Last error: ' + s.last_error : '';
+  $('startBtn').disabled = $('testBtn').disabled = s.desired_state === 'running';
+  $('stopBtn').disabled = s.desired_state === 'stopped';
+  $('nowBtn').disabled = !d.online || s.run_now || !!s.run_until || ['starting', 'searching', 'pausing', 'browsing'].includes(shown);
+  $('cTotal').textContent = d.counts.total; $('cHiring').textContent = d.counts.hiring; $('cToday').textContent = d.counts.today; $('c24').textContent = d.counts.last_24h; $('cEmails').replaceChildren(String(d.counts.emails), ...(d.counts.emails_today ? [el('span', { className: 'plus', textContent: `(+${d.counts.emails_today})`, title: 'new today (since Cairo midnight)' })] : []));
+  renderCriteria(s.search_config, s.current_query);
+}
+
+// Cloud/hosting networks: LinkedIn treats these as high-risk for a personal account.
+const DATACENTER_RE = /microsoft|azure|amazon|aws|google|digitalocean|ovh|hetzner|linode|akamai|oracle|alibaba|vultr|contabo|leaseweb|scaleway|m247|choopa/i;
+
+function renderHost(s) {
+  if (!s.agent_host) { $('host').textContent = '-'; return; }
+  const cc = (s.agent_ip_country || '').toLowerCase();
+  const flag = COUNTRY_NAMES[cc]
+    ? el('img', { className: 'flag', src: `/flags/${cc}.svg`, alt: COUNTRY_NAMES[cc], title: COUNTRY_NAMES[cc] })
+    : cc ? el('span', { className: 'cc', textContent: cc }) : null;
+  const where = [s.agent_ip_city, COUNTRY_NAMES[cc] || s.agent_ip_country].filter(Boolean).join(', ');
+  const kids = [el('div', { className: 'hostline' }, flag, el('span', { textContent: `${s.agent_host} \u00b7 ${s.agent_ip || '?'}` }))];
+  if (where || s.agent_ip_org) kids.push(el('div', { className: 'muted', textContent: [where, s.agent_ip_org].filter(Boolean).join(' \u00b7 ') }));
+  if (DATACENTER_RE.test(s.agent_ip_org || '')) kids.push(el('span', { className: 'dcwarn', textContent: '\u26a0 data-centre IP \u2014 risky for LinkedIn' }));
+  $('host').replaceChildren(...kids);
+}
+
+function renderCriteria(c, current) {
+  if (!c) return;
+  const dateLabel = { 'past-24h': 'past 24 hours', 'past-week': 'past week', 'past-month': 'past month' }[c.date_posted] || c.date_posted || 'any time';
+  const rows = [
+    ['Posted', dateLabel],
+    ['Scroll depth', `${c.max_pages} pages per search`],
+    ['Gap', `${c.gap_seconds[0]}-${c.gap_seconds[1]}s (test ${c.test_gap_seconds[0]}-${c.test_gap_seconds[1]}s)`],
+    ['Repeat', `every ${c.cycle_every_hours}h${c.cycle_jitter_minutes ? ` ± ${c.cycle_jitter_minutes} min (random)` : ''}`],
+    ['Daily cap', `${c.max_searches_per_day} searches`],
+    ...(c.feed_browse ? [['Feed scrolling', `every ${c.feed_browse.every_minutes[0]}-${c.feed_browse.every_minutes[1]} min between cycles; ${Math.round(c.feed_browse.between_searches_chance * 100)}% chance between searches (random)`]] : []),
+    ['Active hours', `${c.active_hours[0]}:00-${c.active_hours[1]}:00 ${c.timezone}`],
+    ...(c.profile_visits ? [['Recruiter profiles', `${Math.round(c.profile_visits.between_searches_chance * 100)}% chance between searches; max ${c.profile_visits.max_per_day}/day; each person once per ${c.profile_visits.revisit_days} days; posts from last ${c.profile_visits.max_age_days} days`]] : []),
+    ...(c.recruiter_search ? [['Recruiter search', `${Math.round(c.recruiter_search.between_searches_chance * 100)}% chance between searches; max ${c.recruiter_search.max_per_day}/day (counts toward the daily cap); ${c.recruiter_search.queries.length} people searches`]] : []),
+    ['Searches', c.searches_per_cycle ? `${Math.min(c.searches_per_cycle, c.queries.length)} per cycle, picked at random from ${c.queries.length}` : `${c.queries.length} (random order)`],
+  ];
+  $('criteria').replaceChildren(...rows.flatMap(([k, v]) => [el('dt', { textContent: k }), el('dd', { textContent: v })]));
+  $('queries').replaceChildren(...c.queries.map(q => el('li', { textContent: q, className: q === current ? 'current' : '' })));
+}
+
+async function loadEvents() {
+  const rows = await api('/api/events?limit=80'); if (!rows) return;
+  $('events').replaceChildren(...rows.map(r => el('div', { className: r.level }, `${CAIRO_SECS.format(new Date(r.at))}  ${r.message}`)));
+}
+
+const COUNTRY_NAMES = { sa: 'Saudi Arabia', ae: 'UAE', qa: 'Qatar', kw: 'Kuwait', bh: 'Bahrain', om: 'Oman', eg: 'Egypt', jo: 'Jordan',
+  lb: 'Lebanon', ma: 'Morocco', tr: 'Turkey', pk: 'Pakistan', in: 'India', gb: 'United Kingdom', ie: 'Ireland', ca: 'Canada',
+  us: 'United States', de: 'Germany', fr: 'France', nl: 'Netherlands', lv: 'Latvia', pl: 'Poland', sg: 'Singapore', my: 'Malaysia', au: 'Australia' };
+
+const MODE_LABELS = { onsite: 'on-site', hybrid: 'hybrid', remote: 'remote' };
+
+function flagCell(code, mode) {
+  if (code === 'eg' && MODE_LABELS[mode]) {
+    return el('span', { title: `Egypt · ${MODE_LABELS[mode]}` },
+      el('img', { className: 'flag', src: '/flags/eg.svg', alt: 'Egypt' }), el('span', { className: 'cc', textContent: 'eg' }),
+      el('span', { className: `tag mode ${mode}`, textContent: MODE_LABELS[mode] }));
+  }
+  if (code === 'remote') return el('span', { title: 'Remote', textContent: '🌐 remote', className: 'muted' });
+  if (code === 'mena') return el('span', { title: 'Middle East / GCC', textContent: '🌍 MENA', className: 'muted' });
+  if (code === 'other') return el('span', { title: 'Outside KSA/MENA', textContent: '— other', className: 'muted' });
+  if (!COUNTRY_NAMES[code]) return el('span', { className: 'muted', textContent: '-' });
+  return el('span', { title: COUNTRY_NAMES[code] },
+    el('img', { className: 'flag', src: `/flags/${code}.svg`, alt: COUNTRY_NAMES[code] }), el('span', { className: 'cc', textContent: code }));
+}
+
+function avatar(name) {
+  const initials = (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  let h = 0; for (const c of name || '') h = (h * 31 + c.charCodeAt(0)) % 360;
+  return el('span', { className: 'avatar', textContent: initials, style: `background:hsl(${h} 45% 38%)` });
+}
+
+function personCell(p) {
+  const url = safeUrl(p.author_profile_url);
+  const search = findPersonUrl(p.author_name);
+  const name = url ? linkEl(url, p.author_name || '?')
+             : search ? Object.assign(linkEl(search, p.author_name), { className: 'fallback', title: 'Profile not captured; opens a LinkedIn people search' })
+             : el('span', { textContent: '?' });
+  name.classList.add('person-name');
+  if (p.author_headline) name.title = [p.author_headline, name.title].filter(Boolean).join('\n');
+  return [avatar(p.author_name), name, srcTag(p), freqTag(p), aiTag(p)];
+}
+
+const isTelegram = p => /^https:\/\/t\.me\//.test(p.post_url || p.author_profile_url || '');
+const isDone = p => !!(p.emailed_at || p.addr_emailed_at);
+const srcTag = p => el('span', { className: 'tag ' + (isTelegram(p) ? 'tg' : 'li'), textContent: isTelegram(p) ? 'Telegram' : 'LinkedIn' });
+const aiTag = p => !p.ai_checked_at ? null
+  : el('span', { className: 'tag ' + (p.ai_fit ? 'fit' : 'unfit'), title: 'Haiku: ' + (p.ai_reason || ''),
+      textContent: p.ai_fit ? '\u2713 AI match' : p.ai_offer ? '\u2717 not a fit' : '\u2717 not a job offer' });
+const FREQ = 2;
+const freqTag = p => p.author_posts >= FREQ ? el('span', { className: 'tag freq', textContent: `\u2605 ${p.author_posts} posts`,
+  title: `Frequent poster: ${p.author_posts} of the collected jobs are from ${p.author_name || 'this person'}` +
+    (p.author_emailed_at ? `; you emailed them ${ago(p.author_emailed_at)} about another post` : '') }) : null;
+
+const linkEl = (href, text) => el('a', { href, target: '_blank', rel: 'noopener noreferrer', textContent: text });
+const jobSection = p => p.job_description ? el('div', { className: 'jobdesc' },
+  el('div', { className: 'jobdesc-h', textContent: `LinkedIn job posting \u00b7 read ${ago(p.job_fetched_at)}` }), p.job_description) : null;
+const jobTag = p => !p.job_description ? null : /No longer accepting applications/i.test(p.job_description)
+  ? el('span', { className: 'tag unfit', textContent: '\u{1F4C4} job closed', title: 'LinkedIn says this job is no longer accepting applications' })
+  : el('span', { className: 'tag', textContent: '\u{1F4C4} job details', title: 'The linked LinkedIn job posting was read; expand the post to see it' });
+const matchTag = (p, short) => {
+  const s = p.ai_match_score; if (s == null) return null;
+  return el('span', { className: 'tag match ' + (s >= 75 ? 'hi' : s >= 50 ? 'mid' : 'lo'),
+    textContent: short ? `${s}%` : `\u{1F3AF} ${s}% CV match`, title: `Haiku, CV vs the ${p.job_description ? 'LinkedIn job' : 'post'}: ` + (p.ai_match_reason || '') });
+};
+
+// Fallbacks when LinkedIn didn't give us an exact URL: open a LinkedIn search instead.
+const clip = (s, n) => Array.from(s || '').slice(0, n).join('');
+function findPostUrl(p) {
+  const words = (p.content || '').replace(/[^\p{L}\p{N}\s'&-]/gu, ' ').split(/\s+/).filter(Boolean).slice(0, 10).join(' ');
+  return words ? 'https://www.linkedin.com/search/results/content/?keywords=' + encodeURIComponent(`"${words}"`) : null;
+}
+const findPersonUrl = name => name ? 'https://www.linkedin.com/search/results/people/?keywords=' + encodeURIComponent(name) : null;
+function postLinks(p) {
+  const out = [];
+  const post = safeUrl(p.post_url), job = safeUrl(p.job_url);
+  if (post) out.push(linkEl(post, 'Post ↗'));
+  else if (findPostUrl(p)) out.push(Object.assign(linkEl(findPostUrl(p), 'Find post ↗'), { className: 'fallback', title: 'Exact link not captured; opens a LinkedIn search for this post' }));
+  if (job) out.push(linkEl(job, 'Job ↗'));
+  return out;
+}
+
+const aiTitles = p => (p.ai_title || '').split('\n').filter(Boolean);
+const titleOf = p => {
+  if (p.job_title) return p.job_title;
+  const t = aiTitles(p);
+  return t.length ? t[0] + (t.length > 1 ? ` +${t.length - 1} more` : '') : clip((p.content || '').split('\n')[0], 100);
+};
+const money = n => n == null ? '' : n >= 1000 ? (n / 1000).toLocaleString('en', { maximumFractionDigits: 1 }) + 'k' : n.toLocaleString('en');
+const PERIOD = { hour: 'Hourly', month: 'Monthly', year: 'Yearly' };
+const periodOf = p => p.salary_period ? PERIOD[p.salary_period] + (p.salary_period_inferred ? '?' : '') : '';
+const salaryOf = p => p.salary_min == null ? '' : [money(p.salary_min), money(p.salary_max)].filter(Boolean).join('–') + ' ' + p.salary_currency + ' ' + periodOf(p).toLowerCase();
+const HOURS_PER_MONTH = 160;
+const toMonthly = (n, per) => n == null ? null : per === 'year' ? Math.round(n / 12) : per === 'hour' ? n * HOURS_PER_MONTH : n;
+const monthlyMin = p => p.salary_period ? toMonthly(p.salary_min, p.salary_period) : null;
+const monthlyOf = p => {
+  const lo = monthlyMin(p); if (lo == null) return '';
+  return [money(lo), money(toMonthly(p.salary_max, p.salary_period))].filter(Boolean).join('–') + ' ' + (p.salary_currency || '');
+};
+const findCompanyUrl = name => name ? 'https://www.linkedin.com/search/results/companies/?keywords=' + encodeURIComponent(name) : null;
+const COLS = [
+  { label: 'Country', key: p => p.country === 'remote' ? '~remote' : p.country === 'mena' ? '~mena' : (COUNTRY_NAMES[p.country] || '') },
+  { label: 'Posted by', key: p => p.author_name || '' },
+  { label: 'Role', key: titleOf },
+  { label: 'Match', key: p => p.ai_match_score ?? '' },
+  { label: 'Company', key: p => p.company || '' },
+  { label: 'Location', key: p => p.location || '' },
+  { label: 'Salary min', key: p => p.salary_min ?? '' },
+  { label: 'Salary max', key: p => p.salary_max ?? '' },
+  { label: 'Currency', key: p => p.salary_currency || '' },
+  { label: 'Period', key: periodOf },
+  { label: 'Monthly', key: p => monthlyMin(p) ?? '' },
+  { label: 'Posted', key: p => new Date(p.posted_at_est || p.first_seen_at).getTime() },
+  { label: 'Fetched (Cairo)', key: p => new Date(p.first_seen_at).getTime() },
+  { label: 'Contact', key: p => (p.contact_emails || []).length },
+  { label: 'Emailed', key: p => (p.emailed_at || p.addr_emailed_at) ? new Date(p.emailed_at || p.addr_emailed_at).getTime() : p.skipped_at ? 0 : '' },
+  { label: 'Links', key: p => (p.post_url ? 1 : 0) + (p.job_url ? 1 : 0) },
+];
+let sort = JSON.parse(localStorage.getItem('postsSort') || '{}');
+if (!COLS.some(c => c.label === sort.col)) sort = { col: 'Posted', dir: -1 };
+let lastRows = [], mailRows = [];
+let page = 1, pageKey = '', pageSize = +localStorage.getItem('pageSize') || 50;
+const openPosts = new Set();  // survives the 30 s refresh
+
+function sortRows(rows) {
+  const c = COLS.find(c => c.label === sort.col); if (!c) return rows;
+  const blank = v => v === '' || v == null || Number.isNaN(v);
+  return [...rows].sort((a, b) => {
+    const x = c.key(a), y = c.key(b);
+    if (blank(x) !== blank(y)) return blank(x) ? 1 : -1;  // empties always last
+    const r = typeof x === 'number' ? x - y : String(x).localeCompare(String(y), undefined, { sensitivity: 'base', numeric: true });
+    return r * sort.dir;
+  });
+}
+
+function setSort(label) {
+  sort = { col: label, dir: sort.col === label ? -sort.dir : (['Posted', 'Fetched (Cairo)', 'Contact', 'Emailed', 'Salary min', 'Salary max', 'Monthly', 'Match'].includes(label) ? -1 : 1) };
+  localStorage.setItem('postsSort', JSON.stringify(sort));
+  page = 1;
+  renderPosts();
+}
+
+let colWidths = JSON.parse(localStorage.getItem('colWidths') || '{}');
+let resizedAt = 0;
+const DEFAULT_WIDTHS = { Country: 80, 'Posted by': 330, Role: 300, Match: 70, Company: 150, Location: 130, 'Salary min': 80, 'Salary max': 80,
+  Currency: 70, Period: 80, Monthly: 110, Posted: 70, 'Fetched (Cairo)': 180, Contact: 240, Emailed: 150, Links: 110 };
+function applyWidths(table) {
+  const ths = [...table.tHead.rows[0].cells];
+  ths.forEach((th, i) => th.style.width = (colWidths[COLS[i].label] || DEFAULT_WIDTHS[COLS[i].label] || 120) + 'px');
+  table.style.width = ths.reduce((s, th) => s + parseFloat(th.style.width), 0) + 'px';
+  table.classList.add('fixed');
+}
+function startResize(e, grip) {
+  e.preventDefault(); e.stopPropagation();
+  const th = grip.parentElement, table = th.closest('table');
+  const ths = [...table.tHead.rows[0].cells];
+  // Freeze every column at its rendered width so only the dragged one changes.
+  ths.forEach((h, i) => colWidths[COLS[i].label] ??= Math.round(h.getBoundingClientRect().width));
+  const label = COLS[ths.indexOf(th)].label, x0 = e.clientX, w0 = colWidths[label];
+  grip.classList.add('drag'); grip.setPointerCapture(e.pointerId);
+  grip.onpointermove = ev => { colWidths[label] = Math.max(40, Math.round(w0 + ev.clientX - x0)); applyWidths(table); };
+  grip.onpointerup = () => {
+    grip.onpointermove = grip.onpointerup = null; grip.classList.remove('drag');
+    localStorage.setItem('colWidths', JSON.stringify(colWidths)); resizedAt = Date.now();
+  };
+}
+function resetWidths(e) {
+  e.stopPropagation();
+  colWidths = {}; localStorage.removeItem('colWidths'); renderPosts();
+}
+
+function renderGrid(rows) {
+  const head = el('tr', {}, ...COLS.map(c => {
+    const on = sort.col === c.label;
+    const th = el('th', { className: 'sortable' + (on ? ' on' : ''), textContent: c.label + (on ? (sort.dir > 0 ? ' ▲' : ' ▼') : ''), title: 'Sort by ' + c.label });
+    th.setAttribute('aria-sort', on ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none');
+    th.onclick = () => { if (Date.now() - resizedAt > 300) setSort(c.label); };
+    const grip = el('span', { className: 'colgrip', title: 'Drag to resize · double-click to reset all' });
+    grip.onpointerdown = e => startResize(e, grip);
+    grip.onclick = e => e.stopPropagation();
+    grip.ondblclick = resetWidths;
+    th.append(grip);
+    return th;
+  }));
+  const body = sortRows(rows).flatMap(p => {
+    const title = titleOf(p);
+    const links = postLinks(p);
+    const textRow = el('tr', { className: 'textrow' }, el('td', { colSpan: COLS.length }, p.content || '(no text)', jobSection(p)));
+    const btn = el('button', { className: 'expand', type: 'button' });
+    const show = open => {
+      btn.textContent = open ? '−' : '+';
+      btn.title = open ? 'Hide post text' : 'View post text';
+      btn.setAttribute('aria-expanded', String(open));
+      textRow.hidden = !open;
+    };
+    show(openPosts.has(p.id));
+    btn.onclick = () => {
+      const open = !openPosts.has(p.id);
+      open ? openPosts.add(p.id) : openPosts.delete(p.id);
+      show(open);
+    };
+    return [el('tr', {},
+      el('td', { className: 'nowrap' }, flagCell(p.country, p.work_mode)),
+      el('td', {}, ...personCell(p)),
+      el('td', { className: 'role', title: aiTitles(p).length > 1 ? aiTitles(p).join('\n') : title }, btn, title,
+        p.saudi_only ? el('span', { className: 'tag saudi', textContent: 'Saudi nationals only' }) : null, jobTag(p)),
+      el('td', { className: 'nowrap' }, matchTag(p, true) || '-'),
+      el('td', {}, p.company ? Object.assign(linkEl(findCompanyUrl(p.company), p.company), { title: 'Search LinkedIn for this company' }) : '-'),
+      el('td', { textContent: p.location || '-' }),
+      el('td', { className: 'nowrap num', textContent: money(p.salary_min) || '-', title: p.salary_text || '' }),
+      el('td', { className: 'nowrap num', textContent: money(p.salary_max) || '-', title: p.salary_text || '' }),
+      el('td', { textContent: p.salary_currency || '-' }),
+      el('td', { className: 'nowrap', textContent: periodOf(p) || '-', title: p.salary_period_inferred ? 'Not stated in the post; guessed from the amount' : '' }),
+      el('td', { className: 'nowrap num', textContent: monthlyOf(p) || '-', title: p.salary_period === 'hour' ? `Hourly × ${HOURS_PER_MONTH} h` : p.salary_period === 'year' ? 'Yearly ÷ 12' : '' }),
+      el('td', { className: 'nowrap', textContent: p.posted_ago || '-', title: 'seen ' + ago(p.first_seen_at) }),
+      el('td', { className: 'nowrap', textContent: cairoTime(p.first_seen_at), title: 'Last seen ' + cairoTime(p.last_seen_at) + ' (Cairo)' }),
+      el('td', {}, ...contactCell(p)),
+      el('td', {}, emailedCell(p)),
+      el('td', { className: 'nowrap' }, ...links.flatMap((a, i) => [i ? ' · ' : null, a]))), textRow];
+  });
+  const table = el('table', { className: 'jobs' }, el('thead', {}, head), el('tbody', {}, ...body));
+  applyWidths(table);
+  return table;
+}
+
+let view = localStorage.getItem('postsView') || 'grid';
+function setView(v) {
+  view = v; localStorage.setItem('postsView', v);
+  document.querySelectorAll('.viewtoggle button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+  loadPosts().catch(e => console.error(e));
+}
+document.querySelectorAll('.viewtoggle button').forEach(b => b.onclick = () => setView(b.dataset.view));
+document.querySelectorAll('.viewtoggle button').forEach(b => b.classList.toggle('on', b.dataset.view === view));
+
+async function loadPosts() {
+  const q = encodeURIComponent($('q').value.trim());
+  const url = (myRoles, q) => `/api/posts?limit=2000&hiring_only=${$('hiringOnly').checked}&ksa_remote=${$('ksaOnly').checked}&my_roles=${myRoles}&saudi=${$('saudiFilter').value}&egypt=${$('egFilter').value}&source=${$('srcFilter').value}&q=${q}`;
+  const postsUrl = url($('myRoles').checked, q);
+  if (postsUrl !== pageKey) { pageKey = postsUrl; page = 1; }
+  const rows = await api(postsUrl); if (!rows) return;
+  $('postCount').textContent = `${rows.length} shown`;
+  lastRows = rows;
+  // The Compose queue ignores the search box (it's for finding one post) and can list Haiku-rejected offers.
+  const mailUrl = url($('myRoles').checked && !$('mRejected').checked, '');
+  mailRows = mailUrl === postsUrl ? rows : (await api(mailUrl)) || rows;
+  renderPosts();
+  renderPicker();
+}
+const reloadFiltered = () => loadPosts().then(refilterPicker).catch(e => console.error(e));
+
+function renderPager(total, pages) {
+  const make = () => {
+    const from = total ? (page - 1) * pageSize + 1 : 0, to = Math.min(page * pageSize, total);
+    const size = el('select', { title: 'Rows per page', onchange: e => {
+      pageSize = +e.target.value; localStorage.setItem('pageSize', pageSize); page = 1; renderPosts(); } },
+      ...[25, 50, 100, 200].map(n => el('option', { value: n, textContent: `${n} / page`, selected: n === pageSize })));
+    return [el('button', { type: 'button', className: 'linkbtn', textContent: '\u2039 Prev', disabled: page <= 1, onclick: () => goPage(page - 1) }),
+      el('span', { className: 'muted', textContent: `Page ${page} of ${pages} \u00b7 ${from}\u2013${to} of ${total}` }),
+      el('button', { type: 'button', className: 'linkbtn', textContent: 'Next \u203a', disabled: page >= pages, onclick: () => goPage(page + 1) }), size];
+  };
+  $('pagerTop').replaceChildren(...make());
+  $('pager').replaceChildren(...make());
+}
+function goPage(n) {
+  page = n; renderPosts();
+  $('pagerTop').scrollIntoView({ block: 'nearest' });
+}
+
+function renderPosts() {
+  if (document.querySelector('.colgrip.drag')) return;  // don't swap the table out mid-drag
+  const all = $('freqOnly').checked ? lastRows.filter(p => p.author_posts >= FREQ) : lastRows;
+  $('postCount').textContent = `${all.length} shown`;
+  $('posts').className = view;
+  if (!all.length) {
+    $('pagerTop').replaceChildren(); $('pager').replaceChildren();
+    $('posts').replaceChildren(el('div', { className: 'empty', textContent: lastRows.length ? 'No frequent posters among these jobs.' : $('cTotal').textContent > 0 ? 'No posts match the search and filters.' : 'No jobs collected yet. Press Start once the agent is online.' }));
+    return;
+  }
+  const pages = Math.ceil(all.length / pageSize);
+  page = Math.min(Math.max(page, 1), pages);
+  const rows = sortRows(all).slice((page - 1) * pageSize, page * pageSize);
+  renderPager(all.length, pages);
+  if (view === 'grid') {
+    $('posts').replaceChildren(renderGrid(rows));
+    return;
+  }
+  const dayAgo = Date.now() - 86400000;
+  $('posts').replaceChildren(...rows.map(p => {
+    const profile = safeUrl(p.author_profile_url);
+    const links = [...postLinks(p), profile ? linkEl(profile, 'Recruiter ↗')
+      : p.author_name ? Object.assign(linkEl(findPersonUrl(p.author_name), 'Find recruiter ↗'), { className: 'fallback' }) : null];
+    const emails = (p.contact_emails || []).map(e => composeLink(p, e, '✉ ' + e));
+    const body = el('div', { className: 'body', title: 'click to expand' }, p.content, jobSection(p));
+    body.onclick = () => body.classList.toggle('open');
+    const where = [p.company, p.location].filter(Boolean).join(' · ');
+    return el('div', { className: 'job' },
+      el('div', {},
+        flagCell(p.country, p.work_mode), ' ',
+        new Date(p.first_seen_at) > dayAgo ? el('span', { className: 'tag new', textContent: 'new' }) : null,
+        p.is_hiring ? null : el('span', { className: 'tag', textContent: 'not hiring' }),
+        p.saudi_only ? el('span', { className: 'tag saudi', textContent: 'Saudi nationals only' }) : null,
+        p.emailed_at ? el('span', { className: 'tag sent', textContent: '✓ emailed ' + ago(p.emailed_at), title: cairoTime(p.emailed_at) + ' Cairo' }) : null,
+        !p.emailed_at && p.skipped_at ? skippedTag(p) : null,
+        srcTag(p), freqTag(p), aiTag(p), matchTag(p), jobTag(p),
+        p.salary_min == null ? null : el('span', { className: 'tag', textContent: '💰 ' + salaryOf(p), title: p.salary_text }),
+        el('span', { className: 'tag', textContent: p.search_keywords })),
+      el('div', { className: 'title', textContent: p.job_title || aiTitles(p).join(' · ') || clip((p.content || '').split('\n')[0], 120) }),
+      where ? el('div', { className: 'where', textContent: where }) : null,
+      el('div', { className: 'meta', textContent: `${p.author_name || '?'} · posted ${p.posted_ago || '?'} · fetched ${cairoTime(p.first_seen_at)} Cairo` }),
+      body,
+      el('div', { className: 'links' }, links, emails));
+  }));
+}
+
+// ---- Compose tab: email on the left, the LinkedIn post on the right ----
+// Your name and phone numbers for the email signature and subject line.
+const ME = { name: 'Your Name', phones: '+00 000 000 0000' };
+let mail = { post: null, file: null, attachCv: true, cfg: null, dirty: false };
+let postView = localStorage.getItem('postView') || 'embed';
+
+function setTab(tab) {
+  document.body.classList.toggle('tab-compose', tab === 'compose');
+  document.body.classList.toggle('tab-salaries', tab === 'salaries');
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+}
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  setTab(b.dataset.tab);
+  if (b.dataset.tab === 'salaries') { loadSalaries().catch(e => console.error('[salaries]', e)); return; }
+  if (b.dataset.tab !== 'compose') return;
+  renderPicker();
+  if (!mail.post) {
+    const rows = pickRows();
+    const first = rows.find(p => !isDone(p) && !isRejected(p)) || rows.find(p => !isDone(p)) || rows[0];
+    if (first) openPicked(first);
+  }
+});
+
+// ---- Salaries tab: stated pay vs Haiku estimate, grouped by role family / sector / seniority ----
+let salData = null;
+let salCols = JSON.parse(localStorage.getItem('salCols') || 'null');
+const SAL_COLS_DEFAULT = 'minmax(180px,260px) 70px minmax(260px,1fr) 170px 150px';
+const applySalCols = grid => { grid.style.gridTemplateColumns = salCols ? salCols.map(w => w + 'px').join(' ') : SAL_COLS_DEFAULT; };
+function salResize(e, grip, grid, i) {
+  e.preventDefault(); e.stopPropagation();
+  // Freeze every column at its rendered width so only the dragged one changes.
+  salCols = salCols || [...grid.querySelectorAll(':scope > .h')].map(h => Math.round(h.getBoundingClientRect().width));
+  const x0 = e.clientX, w0 = salCols[i];
+  grip.classList.add('drag'); grip.setPointerCapture(e.pointerId);
+  grip.onpointermove = ev => { salCols[i] = Math.max(50, Math.round(w0 + ev.clientX - x0)); applySalCols(grid); };
+  grip.onpointerup = () => {
+    grip.onpointermove = grip.onpointerup = null; grip.classList.remove('drag');
+    localStorage.setItem('salCols', JSON.stringify(salCols));
+  };
+}
+const usd = n => n == null ? '\u2013' : n >= 10000 ? `$${(n / 1000).toFixed(n >= 100000 ? 0 : 1)}k` : `$${Math.round(n).toLocaleString()}`;
+const usdRange = (lo, hi) => lo == null ? '\u2013' : hi && hi !== lo ? `${usd(lo)}\u2013${usd(hi)}` : usd(lo);
+const COUNTRY_LABELS = { remote: '\ud83c\udf10 Remote', mena: '\ud83c\udf0d MENA', other: 'Other countries', '': 'Location unknown' };
+const countryName = code => COUNTRY_NAMES[code] || COUNTRY_LABELS[code] || code;
+const countryTag = code => COUNTRY_NAMES[code]
+  ? el('span', { className: 'sc' }, el('img', { className: 'flag', src: `/flags/${code}.svg`, alt: '' }), ' ' + COUNTRY_NAMES[code])
+  : el('span', { className: 'sc muted', textContent: countryName(code) });
+async function loadSalaries() {
+  const d = await api(`/api/salaries?group=${$('sGroup').value}&matching_only=${$('sMatch').checked}&source=${$('srcFilter').value}&country=${encodeURIComponent($('sCountry').value)}`);
+  if (!d) return;
+  salData = d;
+  const sel = $('sCountry'), cur = sel.value;
+  sel.replaceChildren(el('option', { value: 'split', textContent: 'Split by country' }), el('option', { value: 'all', textContent: 'All countries combined' }),
+    ...d.countries.map(c => el('option', { value: c.code, textContent: `${countryName(c.code)} (${c.n})` })));
+  sel.value = cur;
+  if (sel.value !== cur) { sel.value = 'split'; return loadSalaries(); }
+  renderSalaries();
+}
+function renderSalaries() {
+  const d = salData; if (!d) return;
+  const showEst = $('sEst').checked;
+  const groups = d.groups.filter(g => g.stated.n || (showEst && g.est.n));
+  const stated = groups.reduce((n, g) => n + g.stated.n, 0), posts = groups.reduce((n, g) => n + g.n, 0);
+  $('sInfo').textContent = `${posts} job offers \u00b7 ${stated} state a salary` + (d.pending ? ` \u00b7 ${d.pending} still being classified by Haiku` : '');
+  if (!groups.length) { $('sTable').replaceChildren(el('div', { className: 'muted', textContent: d.pending ? 'Haiku is still classifying posts; check back in a few minutes.' : 'No salaries yet.' })); return; }
+  const keep = g => g.stated.n || (showEst && g.est.n);
+  const top = Math.max(1, ...groups.flatMap(g => [g, ...(g.by_country || [])])
+    .flatMap(g => [g.stated.max || 0, showEst ? g.est.max || g.est.min || 0 : 0]));
+  const pc = v => `${(100 * v / top).toFixed(2)}%`;
+  const bar = g => el('div', { className: 'sbar' },
+    g.stated.n ? el('div', { className: 'rng', style: `left:${pc(g.stated.min)};width:${pc(g.stated.max - g.stated.min)}` }) : null,
+    g.stated.n ? el('div', { className: 'iqr', style: `left:${pc(g.stated.p25)};width:max(4px, ${pc(g.stated.p75 - g.stated.p25)})` }) : null,
+    g.stated.n ? el('div', { className: 'med', style: `left:${pc(g.stated.median)}` }) : null,
+    showEst && g.est.n ? el('div', { className: 'est', style: `left:${pc(g.est.min)};width:max(4px, ${pc((g.est.max || g.est.min) - g.est.min)})` }) : null);
+  const byCountry = $('sGroup').value === 'country', split = !byCountry && $('sCountry').value === 'split';
+  const kids = [el('div', { className: 'h', textContent: $('sGroup').selectedOptions[0].textContent + (split ? ' \u00b7 country' : '') }), el('div', { className: 'h', textContent: 'Stated / offers' }),
+    el('div', { className: 'h' }, el('div', { className: 'saxis' }, ...[0, .25, .5, .75, 1].map(f => el('span', { textContent: f ? `${usd(top * f)}/mo` : '$0' })))),
+    el('div', { className: 'h', textContent: 'Stated per month (median \u00b7 range)' }), el('div', { className: 'h', textContent: 'Haiku estimate per month' })];
+  const statCells = g => [
+    el('div', { textContent: `${g.stated.n} / ${g.n}`, title: `${g.stated.n} of ${g.n} offers state a salary` }),
+    el('div', {}, bar(g)),
+    el('div', { textContent: g.stated.n ? `${usd(g.stated.median)}/mo \u00b7 ${usdRange(g.stated.min, g.stated.max)}/mo` : '\u2013' }),
+    el('div', { className: 'muted', textContent: showEst && g.est.n ? `${usdRange(g.est.min, g.est.max)}/mo (${g.est.n})` : '\u2013' })];
+  const postList = g => el('div', { className: 'sposts', hidden: true }, ...g.posts
+      .filter(p => p.usd_min != null || (showEst && p.est_min != null))
+      .sort((a, b) => (b.usd_max || b.usd_min || -1) - (a.usd_max || a.usd_min || -1))
+      .map(p => {
+        const url = safeUrl(p.post_url);
+        return el('div', {},
+          el('span', {}, `${p.title || '(untitled)'}${p.company ? ' \u2014 ' + p.company : ''}${p.location ? ' \u00b7 ' + p.location : ''} `,
+            p.ai_fit ? el('span', { className: 'tag fit', textContent: '\u2713 match' }) : null, ' ',
+            url ? linkEl(url, 'Post \u2197') : null),
+          p.usd_min != null
+            ? el('span', { className: 'pay', textContent: `${usdRange(p.usd_min, p.usd_max)}/mo`, title: `As stated: ${p.ai_sal_text || `${p.ai_sal_min} ${p.ai_sal_currency} per ${p.ai_sal_period}`}${p.ai_sal_period && p.ai_sal_period !== 'month' ? ` \u2192 converted from per ${p.ai_sal_period} to per month` : ''}` })
+            : el('span', { className: 'pay est', textContent: `est. ${usdRange(p.est_min, p.est_max)}/mo`, title: 'Haiku estimate; the post states no salary' }));
+      }));
+  // A row that opens its posts list.
+  const postsRow = (g, name, cls = '') => {
+    const row = el('div', { className: 'srow' + cls, title: 'Show the posts' }, el('div', { className: 'nm' }, name), ...statCells(g));
+    const list = postList(g);
+    row.onclick = () => { list.hidden = !list.hidden; row.classList.toggle('open', !list.hidden); };
+    return [row, list];
+  };
+  for (const g of groups) {
+    if (!split) { kids.push(...postsRow(g, byCountry ? countryTag(g.name) : g.name)); continue; }
+    // Collapsed: all countries together; expanded: one row per country, each opening its posts.
+    const subs = (g.by_country || []).filter(keep).map(c => postsRow(c, countryTag(c.name), ' sub'));
+    const row = el('div', { className: 'srow', title: 'Show the breakdown per country' },
+      el('div', { className: 'nm' }, g.name, el('span', { className: 'muted sall', textContent: ` \u00b7 ${subs.length} ${subs.length === 1 ? 'country' : 'countries'}` })),
+      ...statCells(g));
+    subs.flat().forEach(n => { n.hidden = true; });
+    row.onclick = () => {
+      const open = !row.classList.contains('open');
+      row.classList.toggle('open', open);
+      for (const [r, list] of subs) { r.hidden = !open; r.classList.remove('open'); list.hidden = true; }
+    };
+    kids.push(row, ...subs.flat());
+  }
+  $('sTable').replaceChildren(el('div', { className: 'sgrid' }, ...kids));
+  const grid = $('sTable').firstChild;
+  applySalCols(grid);
+  [...grid.querySelectorAll(':scope > .h')].forEach((h, i) => {
+    const grip = el('span', { className: 'colgrip', title: 'Drag to resize \u00b7 double-click to reset all' });
+    grip.onpointerdown = e => salResize(e, grip, grid, i);
+    grip.onclick = e => e.stopPropagation();
+    grip.ondblclick = e => { e.stopPropagation(); salCols = null; localStorage.removeItem('salCols'); applySalCols(grid); };
+    h.append(grip);
+  });
+}
+$('sGroup').onchange = $('sMatch').onchange = $('sCountry').onchange = () => loadSalaries().catch(e => console.error('[salaries]', e));
+$('sEst').onchange = renderSalaries;
+
+const isRejected = p => !!p.ai_checked_at && !p.ai_fit;
+const passesPick = p => (!$('mWithEmail').checked || (p.contact_emails || []).length) && ($('mShowSkipped').checked || !p.skipped_at)
+  && (!$('mUnsent').checked || !(isDone(p) || p.author_emailed_at)) && ($('mRejected').checked || !isRejected(p));
+const pickRows = () => {
+  const cur = mail.post && mail.post.id;
+  return sortRows(mailRows).filter(p => p.id === cur || passesPick(p));
+};
+// After any filter change, start over at the first matching post (asks before dropping an edited draft).
+function refilterPicker() {
+  if (mail.dirty && mail.post && !confirm('Filters changed. Discard the current draft?')) { renderPicker(); return; }
+  mail.dirty = false;
+  if (!document.body.classList.contains('tab-compose')) { closeCompose(); return; }  // opens the first one on tab switch
+  const first = sortRows(mailRows).find(passesPick);
+  if (first) openPicked(first); else closeCompose();
+}
+function renderPicker() {
+  const rows = pickRows();
+  $('mPick').replaceChildren(
+    el('option', { value: '', textContent: rows.length ? `Pick a post (${rows.length})` : 'No posts match the Jobs filters' }),
+    ...rows.map(p => el('option', { value: p.id, textContent:
+      `${isDone(p) ? '\u2713 ' : p.skipped_at ? '\u2298 ' : ''}${isRejected(p) ? '[\u2717 Haiku] ' : ''}${isTelegram(p) ? '[Telegram] ' : ''}${titleOf(p)}${p.company ? ' \u2014 ' + p.company : ''} \u00b7 ${p.author_name || '?'}${p.posted_ago ? ' \u00b7 ' + p.posted_ago : ''}` })));
+  $('mPick').value = mail.post && rows.some(p => p.id === mail.post.id) ? String(mail.post.id) : '';
+  $('mEmpty').textContent = rows.length ? 'Pick a post above, or click an email address in the Jobs tab.'
+    : 'No posts match these filters. Untick "unsent only" or loosen the Jobs filters.';
+  const withEmail = mailRows.filter(p => (p.contact_emails || []).length && ($('mRejected').checked || !isRejected(p)));
+  const sent = withEmail.filter(isDone).length, skipped = withEmail.filter(p => !isDone(p) && p.skipped_at).length;
+  const leftRows = withEmail.filter(p => !isDone(p) && !p.skipped_at), rejLeft = leftRows.filter(isRejected).length;
+  const left = leftRows.length - rejLeft;
+  const at = mail.post ? rows.findIndex(p => p.id === mail.post.id) : -1;
+  const stuck = rows.length === 0 || (rows.length === 1 && at === 0);
+  for (const id of ['mPrev', 'mNext', 'mPrev2', 'mNext2']) {
+    $(id).disabled = stuck;
+    $(id).title = stuck ? 'No other posts match the Compose filters (e.g. untick "unsent only")' : id.includes('Prev') ? 'Previous post' : 'Next post';
+  }
+  $('mLeft').textContent = `${at >= 0 ? `post ${at + 1} of ${rows.length} \u00b7 ` : ''}${left ? `${left} left to email` : 'all matches emailed \u2713'}`
+    + `${rejLeft ? ` + ${rejLeft} \u2717 rejected` : ''} (${sent} sent, ${skipped} skipped)`;
+  $('mLeft').title = 'Posts with an email, within the Jobs filters. "Left" counts Haiku matches; "\u2717 rejected" are offers Haiku judged not a fit. "Sent" includes posts whose address you already emailed about another post.';
+}
+function openPicked(p) {
+  openCompose(p).catch(e => { console.error('[compose] open failed:', e); alert(e.message); }).finally(renderPicker);
+}
+$('mPick').onchange = () => { const p = mailRows.find(r => String(r.id) === $('mPick').value); if (p) openPicked(p); };
+$('mWithEmail').onchange = $('mShowSkipped').onchange = refilterPicker;
+$('mUnsent').checked = localStorage.getItem('mUnsent') === '1';
+$('mUnsent').onchange = () => { localStorage.setItem('mUnsent', $('mUnsent').checked ? '1' : '0'); refilterPicker(); };
+$('mRejected').checked = localStorage.getItem('mRejected') !== '0';
+$('mRejected').onchange = () => { localStorage.setItem('mRejected', $('mRejected').checked ? '1' : '0'); reloadFiltered(); };
+for (const [id, step] of [['mPrev', -1], ['mNext', 1], ['mPrev2', -1], ['mNext2', 1]]) $(id).onclick = () => {
+  const rows = pickRows(); if (!rows.length) return;
+  const i = mail.post ? rows.findIndex(p => p.id === mail.post.id) : -1;
+  openPicked(rows[i < 0 ? 0 : (i + step + rows.length) % rows.length]);
+};
+
+function composeLink(p, email, text) {
+  const a = el('a', { href: '#', className: 'compose', textContent: text, title: 'Write an email in the Compose tab' });
+  a.onclick = e => { e.preventDefault(); openCompose(p, email).catch(err => { console.error('[compose] open failed:', err); alert(err.message); }).finally(renderPicker); };
+  return a;
+}
+function contactCell(p) {
+  const kids = (p.contact_emails || []).flatMap((e, i) => [i ? ', ' : null, composeLink(p, e, e)]);
+  if (!kids.length) kids.push(el('span', { className: 'muted', textContent: 'N/A', title: 'No email in the post' }));
+  return kids;
+}
+const skippedTag = p => el('span', { className: 'tag skipped', textContent: '\u2298 Skipped', title: `Marked not interested ${cairoTime(p.skipped_at)} Cairo` });
+function emailedCell(p) {
+  if (p.emailed_at) return el('span', { className: 'tag sent', textContent: '\u2713 sent ' + ago(p.emailed_at), title: `${cairoTime(p.emailed_at)} Cairo` + (p.emailed_to ? ' to ' + p.emailed_to.join(', ') : '') });
+  if (p.addr_emailed_at) return el('span', { className: 'tag sent', textContent: '\u2713 address emailed ' + ago(p.addr_emailed_at), title: 'This address was emailed about another post' });
+  if (p.skipped_at) return skippedTag(p);
+  return el('span', { className: 'muted', textContent: 'not sent' });
+}
+
+function renderSkip() {
+  renderMailNote();
+  const skipped = !!mail.post.skipped_at;
+  $('mSkip').textContent = skipped ? 'Unskip' : 'Skip \u203a';
+  $('mSkip').title = skipped ? `Skipped ${cairoTime(mail.post.skipped_at)} Cairo; click to restore it` : 'Not interested: hide this post and open the next one';
+}
+function closeCompose() {
+  mail = { ...mail, post: null, file: null, dirty: false };
+  $('mForm').hidden = true; $('mEmpty').hidden = false;
+  $('pHead').replaceChildren(el('h2', { textContent: 'Post' }));
+  $('pToggle').hidden = $('pFrame').hidden = $('pText').hidden = true;
+  renderPicker();
+}
+$('mSkip').onclick = async () => {
+  const p = mail.post; if (!p) return;
+  const skip = !p.skipped_at;
+  const rows = pickRows(), i = rows.findIndex(r => r.id === p.id);
+  $('mSkip').disabled = true;
+  try {
+    const r = await api(`/api/posts/${p.id}/skip`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ skip }) });
+    if (!r) return;
+    p.skipped_at = r.skipped_at;
+    for (const list of [lastRows, mailRows]) { const row = list.find(x => x.id === p.id); if (row) row.skipped_at = r.skipped_at; }
+    renderPosts();
+    if (!skip) { renderSkip(); renderPicker(); return; }
+    const after = [...rows.slice(i + 1), ...rows.slice(0, Math.max(i, 0))].filter(x => x.id !== p.id && !x.skipped_at);
+    const next = after.find(x => !isDone(x)) || after[0];
+    mail.dirty = false;
+    if (next) openPicked(next); else closeCompose();
+  } catch (e) {
+    console.error('[compose] skip failed:', e); alert(e.message);
+  } finally {
+    $('mSkip').disabled = false;
+  }
+};
+
+// Public LinkedIn posts can be framed via /embed/feed/update/<urn>.
+function embedUrl(u) {
+  const m = /[-:](share|ugcPost|activity)[-:](\d{15,25})/.exec(u || '');
+  return m ? `https://www.linkedin.com/embed/feed/update/urn:li:${m[1]}:${m[2]}` : null;
+}
+
+const roleOf = p => p.job_title || aiTitles(p)[0] || '';
+const subjectFor = p => `${roleOf(p) || 'Job application'} [${ME.name}]`;
+function draftBody(p) {
+  const first = /^https:\/\/t\.me\//.test(p.post_url || '') ? '' : (p.author_name || '').trim().split(/\s+/)[0] || '';
+  const greet = /^\p{L}[\p{L}'-]+$/u.test(first) ? `Dear ${first},` : 'Dear Hiring Manager,';
+  const what = roleOf(p) ? `the ${roleOf(p)} role${p.company ? ' at ' + p.company : ''}`
+    : 'a Senior AI Architect, Director of AI/CPaaS, or C-level technology role (CTO, Chief AI Officer)';
+  return [
+    el('p', { textContent: greet }),
+    el('p', { textContent: `I'm writing to express my interest in ${what}. I'm a technology leader and entrepreneur with deep, hands-on expertise in AI, machine learning and CPaaS. I combine architecture and delivery with ownership of strategy, clients and commercial results.` }),
+    el('ul', {}, ...[
+      ['Advanced AI and ML', 'fine-tuning and aligning LLMs (LoRA, RLHF), advanced RAG, agentic and voice AI, and model evaluation, with full MLOps on SageMaker, Bedrock and Azure AI.'],
+      ['CPaaS, SaaS and telecom', 'building multi-tenant SaaS platforms and CPaaS solutions (WhatsApp Business, SMS, voice and contact centres) with telecom operators and messaging providers, including billing and usage-based pricing.'],
+      ['Saudi data governance and compliance', 'solutions aligned with the Saudi Personal Data Protection Law (PDPL) and the national data-management standards (NDMO).'],
+      ['Founder and entrepreneur', "I've taken AI products from idea to paying clients, including a multi-model generative-AI platform and a bilingual (Arabic/English) conversational AI platform."],
+      ['Leadership and client engagement', 'leading cross-functional teams; executive and board-level presentations; trusted advisor to enterprise and government clients.'],
+      ['Strategy, MVPs and RFPs', 'AI and product strategy and roadmaps; rapid MVPs that scale to production; winning technical proposals; pricing models and cost optimisation.'],
+      ['Innovation and awards', 'award-winning AI innovation in KSA and the UAE.'],
+    ].map(([k, v]) => el('li', {}, el('b', { textContent: k + ': ' }), v))),
+    el('p', { textContent: "With over 10 years of experience and an M.Sc. in Computer Science, I bring the rare mix of deep technical expertise, regulatory awareness and business leadership needed to turn AI into measurable results. My CV is attached, and I'd welcome a short call." }),
+    el('p', {}, 'Best regards,', el('br'), el('b', { textContent: ME.name }), el('br'), ME.phones),
+  ];
+}
+
+async function openCompose(p, email) {
+  setTab('compose');
+  if (mail.dirty && mail.post) {
+    if (mail.post.id === p.id) { if (email && !$('mTo').value.includes(email)) $('mTo').value = email; return; }
+    if (!confirm('Discard the current draft?')) return;
+  }
+  const [full, cfg] = await Promise.all([api(`/api/posts/${p.id}`), api('/api/mail/config')]);
+  if (!full || !cfg) return;
+  mail = { post: full, file: null, attachCv: true, cfg, dirty: false };
+  $('mTo').value = email || (full.contact_emails || [])[0] || '';
+  $('mCc').value = '';
+  $('mSubject').value = subjectFor(full);
+  $('mBody').replaceChildren(...draftBody(full));
+  $('mStatus').textContent = ''; $('mStatus').className = '';
+  disarmSend();
+  $('mEmpty').hidden = true; $('mForm').hidden = false;
+  renderSkip();
+  renderChips(); renderAttach(); renderMailNote(); renderPost(full);
+}
+
+function renderChips() {
+  const cur = $('mTo').value.toLowerCase();
+  const others = (mail.post.contact_emails || []).filter(e => !cur.includes(e.toLowerCase()));
+  $('mChips').replaceChildren(...(others.length ? [el('span', { className: 'muted', textContent: 'Also in post:' })] : []), ...others.map(e => {
+    const b = el('button', { type: 'button', className: 'chip', textContent: '+ ' + e });
+    b.onclick = () => { $('mTo').value = [$('mTo').value.trim(), e].filter(Boolean).join(', '); mail.dirty = true; renderChips(); };
+    return b;
+  }));
+}
+
+const kb = n => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+function renderAttach() {
+  const cv = mail.cfg.cv;
+  if (mail.file) $('mAttach').replaceChildren(`${mail.file.name} (${kb(mail.file.size)})`);
+  else if (mail.attachCv && cv) $('mAttach').replaceChildren(Object.assign(linkEl('/api/cv', cv.filename), { title: 'Open the CV that will be attached' }), ` (${kb(cv.size)})`);
+  else {
+    const kids = [el('span', { className: 'muted', textContent: cv ? 'No attachment' : 'No CV on the server; use Replace to attach one' })];
+    if (cv) { const b = el('button', { type: 'button', className: 'linkbtn', textContent: 'Attach CV' }); b.onclick = () => { mail.attachCv = true; renderAttach(); }; kids.push(' ', b); }
+    $('mAttach').replaceChildren(...kids);
+  }
+  $('mDetach').hidden = !(mail.file || (mail.attachCv && cv));
+}
+$('mFile').onchange = () => {
+  const f = $('mFile').files[0]; $('mFile').value = '';
+  if (!f) return;
+  if (f.size > 5 * 1048576) { alert('Attachment must be 5 MB or less'); return; }
+  mail.file = f; mail.attachCv = false; mail.dirty = true; renderAttach();
+};
+$('mDetach').onclick = () => { mail.file = null; mail.attachCv = false; mail.dirty = true; renderAttach(); };
+
+function renderMailNote() {
+  const c = mail.cfg, notes = [];
+  if (mail.post.skipped_at)
+    notes.push(el('div', { className: 'skipnote', textContent: `\u2298 SKIPPED \u2014 you marked this post "not interested" on ${cairoTime(mail.post.skipped_at)} Cairo. Click Unskip to restore it.` }));
+  if (!c.configured) notes.push(el('div', { className: 'warnnote', textContent: 'Gmail is not connected on the server yet (run deploy/gmail-oauth-login.py once); Send is disabled.' }));
+  else if (!c.allowed) notes.push(el('div', { className: 'warnnote', textContent: `Your sign-in may not send from ${c.from}.` }));
+  for (const s of mail.post.sent || [])
+    notes.push(s.status === 'failed'
+      ? el('div', { className: 'warnnote', textContent: `Failed to send to ${s.to_addrs.join(', ')} on ${cairoTime(s.sent_at)} Cairo: ${s.error || 'unknown error'}` })
+      : el('div', { className: 'sentnote', textContent: `Already emailed ${s.to_addrs.join(', ')} on ${cairoTime(s.sent_at)} Cairo: "${s.subject}"` }));
+  if (isRejected(mail.post))
+    notes.push(el('div', { className: 'ainote', textContent:
+      `\u2717 Haiku: ${mail.post.ai_offer ? 'not a fit' : 'not a job offer'}${mail.post.ai_reason ? ' \u2014 ' + mail.post.ai_reason : ''}` }));
+  const mine = new Set((mail.post.contact_emails || []).map(e => e.toLowerCase()));
+  for (const s of mail.post.author_sent || []) {
+    const same = s.to_addrs.filter(a => mine.has(a.toLowerCase()));
+    notes.push(el('div', { className: 'warnnote', textContent: same.length
+      ? `You already emailed ${same.join(', ')} on ${cairoTime(s.sent_at)} Cairo about another post: "${s.subject}"`
+      : `You already emailed ${mail.post.author_name || 'this poster'} (${s.to_addrs.join(', ')}) on ${cairoTime(s.sent_at)} Cairo about another post: "${s.subject}"` }));
+  }
+  $('mNote').replaceChildren(...notes);
+  $('mFrom').textContent = c.from || '-';
+  $('mSend').disabled = !c.configured || !c.allowed;
+  if ($('mSend').disabled) console.warn('[send] Send is disabled:', !c.configured ? 'Gmail not configured on the server' : `your sign-in may not send from ${c.from}`, c);
+}
+
+function renderPost(p) {
+  const profile = safeUrl(p.author_profile_url);
+  $('pHead').replaceChildren(
+    el('div', { className: 'person' }, avatar(p.author_name), el('div', {},
+      el('div', { className: 'name' }, profile ? linkEl(profile, p.author_name || '?') : (p.author_name || '?')),
+      el('div', { className: 'headline', textContent: p.author_headline || '', title: p.author_headline || '' }), srcTag(p), freqTag(p), aiTag(p), matchTag(p))),
+    el('div', { className: 'title', textContent: titleOf(p) }),
+    el('div', { className: 'muted', textContent: [p.company, p.location, p.posted_ago && 'posted ' + p.posted_ago].filter(Boolean).join(' \u00b7 ') }),
+    el('div', { className: 'links' }, ...postLinks(p).flatMap((a, i) => [i ? ' \u00b7 ' : null, a])));
+  $('pText').replaceChildren(p.content || '(no text)', ...[jobSection(p)].filter(Boolean));
+  $('pToggle').hidden = !embedUrl(p.post_url);
+  showPostView(postView);
+}
+function showPostView(v) {
+  const embed = embedUrl(mail.post && mail.post.post_url);
+  const useEmbed = v === 'embed' && !!embed;
+  if (useEmbed && $('pFrame').src !== embed) $('pFrame').src = embed;
+  $('pFrame').hidden = !useEmbed; $('pText').hidden = useEmbed;
+  document.querySelectorAll('#pToggle button').forEach(b => b.classList.toggle('on', b.dataset.pv === (useEmbed ? 'embed' : 'text')));
+}
+document.querySelectorAll('#pToggle button').forEach(b => b.onclick = () => {
+  postView = b.dataset.pv; localStorage.setItem('postView', postView); showPostView(postView);
+});
+
+document.querySelectorAll('#rtbar button').forEach(b => {
+  b.onmousedown = e => e.preventDefault();  // keep the editor selection
+  b.onclick = () => {
+    let arg = null;
+    if (b.dataset.cmd === 'createLink') {
+      arg = prompt('Link URL', 'https://');
+      if (!arg || !/^(https?:\/\/|mailto:)/i.test(arg)) return;
+    }
+    document.execCommand(b.dataset.cmd, false, arg);
+    mail.dirty = true;
+  };
+});
+$('mBody').oninput = $('mSubject').oninput = $('mCc').oninput = () => { mail.dirty = true; };
+
+// Paste: Markdown text (e.g. copied from a chat) becomes lists/bold; other HTML is reduced to safe basic tags.
+const escHtml = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const mdInline = s => escHtml(s)
+  .replace(/`([^`]+)`/g, '<code>$1</code>')
+  .replace(/\*\*([^*]+)\*\*|__([^_]+)__/g, (_, a, b) => `<b>${a || b}</b>`)
+  .replace(/(^|[^*\w])\*([^*\s][^*]*)\*(?!\*)/g, '$1<i>$2</i>')
+  .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/g, '<a href="$2">$1</a>');
+const looksMarkdown = t => /(^|\n)[ \t]*([-*+]|\d+[.)])[ \t]+\S|\*\*[^*\n]+\*\*|(^|\n)#{1,6}[ \t]/.test(t);
+function mdToHtml(text) {
+  let html = '';
+  const stack = [];  // open lists: {indent, tag}; each has an open <li>
+  const closeTo = n => { while (stack.length > n) html += `</li></${stack.pop().tag}>`; };
+  for (const raw of text.replace(/\r/g, '').split('\n')) {
+    const line = raw.replace(/\t/g, '    ');
+    const m = /^( *)([-*+]|\d+[.)]) +(.*)$/.exec(line);
+    if (m) {
+      const indent = m[1].length, tag = /\d/.test(m[2]) ? 'ol' : 'ul';
+      while (stack.length && indent < stack[stack.length - 1].indent) closeTo(stack.length - 1);
+      const top = stack[stack.length - 1];
+      if (top && indent === top.indent && tag === top.tag) html += '</li>';
+      else {
+        if (top && indent === top.indent) closeTo(stack.length - 1);
+        html += `<${tag}>`; stack.push({ indent, tag });
+      }
+      html += '<li>' + mdInline(m[3]);
+    } else if (!line.trim()) {
+      continue;
+    } else if (stack.length && /^ {2,}\S/.test(line)) {
+      html += '<br>' + mdInline(line.trim());
+    } else {
+      closeTo(0);
+      const h = /^#{1,6} +(.*)$/.exec(line);
+      if (/^ *(-{3,}|\*{3,}|_{3,}) *$/.test(line)) continue;
+      html += `<p>${h ? '<b>' + mdInline(h[1]) + '</b>' : mdInline(line.trim())}</p>`;
+    }
+  }
+  closeTo(0);
+  return html;
+}
+const KEEP_TAGS = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'UL', 'OL', 'LI', 'P', 'BR', 'A', 'CODE', 'H1', 'H2', 'H3', 'H4']);
+function cleanHtml(src) {
+  const doc = new DOMParser().parseFromString(src, 'text/html');
+  const walk = node => [...node.childNodes].map(n => {
+    if (n.nodeType === 3) return escHtml(n.textContent);
+    if (n.nodeType !== 1 || /^(SCRIPT|STYLE|META|LINK|TITLE)$/.test(n.tagName)) return '';
+    const inner = walk(n);
+    if (!KEEP_TAGS.has(n.tagName)) return /^(DIV|SECTION|TR|BLOCKQUOTE)$/.test(n.tagName) ? `<p>${inner}</p>` : inner;
+    const tag = /^H\d$/.test(n.tagName) ? 'p' : n.tagName.toLowerCase();
+    if (tag === 'br') return '<br>';
+    if (tag === 'a') {
+      const href = n.getAttribute('href') || '';
+      return /^(https?:|mailto:)/i.test(href) ? `<a href="${escHtml(href)}">${inner}</a>` : inner;
+    }
+    return /^H\d$/.test(n.tagName) ? `<p><b>${inner}</b></p>` : `<${tag}>${inner}</${tag}>`;
+  }).join('');
+  return walk(doc.body);
+}
+$('mBody').addEventListener('paste', e => {
+  const text = e.clipboardData.getData('text/plain'), rich = e.clipboardData.getData('text/html');
+  const html = looksMarkdown(text) ? mdToHtml(text) : rich ? cleanHtml(rich) : null;
+  if (html == null) return;
+  e.preventDefault();
+  document.execCommand('insertHTML', false, html);
+  mail.dirty = true;
+  console.log('[paste]', looksMarkdown(text) ? 'markdown' : 'html', `${html.length} chars`);
+});
+$('mTo').oninput = () => { mail.dirty = true; renderChips(); };
+$('mReset').onclick = () => {
+  if (!mail.post || !confirm('Replace your edits with a fresh draft?')) return;
+  mail.dirty = false;
+  openCompose(mail.post).catch(e => { console.error('[compose] reset failed:', e); alert(e.message); });
+};
+
+const splitAddrs = s => s.split(/[,;\s]+/).filter(Boolean);
+const CONFIRM_SECONDS = 15;
+let sendArmed = null, armTick = null;
+function disarmSend(why) {
+  if (!sendArmed) return;
+  if (why) console.info('[send] confirmation cancelled:', why);
+  clearTimeout(sendArmed); clearInterval(armTick); sendArmed = armTick = null;
+  $('mSend').textContent = 'Send'; $('mSend').classList.remove('arm');
+  if (!$('mStatus').className) $('mStatus').textContent = '';
+}
+const fileB64 = f => new Promise((res, rej) => {
+  const r = new FileReader();
+  r.onload = () => res(String(r.result).split(',')[1]); r.onerror = () => rej(r.error);
+  r.readAsDataURL(f);
+});
+// Disabled or covered buttons get no click event, so trace the raw pointer instead.
+document.addEventListener('pointerdown', e => {
+  const b = $('mSend'), r = b.getBoundingClientRect();
+  if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom || b.offsetParent === null) return;
+  if (e.target !== b && !b.contains(e.target)) console.warn('[send] click landed on another element covering Send:', e.target);
+  else if (b.disabled) console.warn('[send] Send is disabled', { configured: mail.cfg && mail.cfg.configured, allowed: mail.cfg && mail.cfg.allowed });
+}, true);
+$('mSend').onclick = async () => {
+  const to = splitAddrs($('mTo').value), cc = splitAddrs($('mCc').value), subject = $('mSubject').value.trim();
+  const say = (cls, text) => { $('mStatus').className = cls; $('mStatus').textContent = text; };
+  console.info('[send] click', { armed: !!sendArmed, post: mail.post && mail.post.id, to, cc, subject });
+  if (!to.length) { disarmSend(); say('bad', 'Add a recipient'); console.warn('[send] no recipient'); return; }
+  if (!subject) { disarmSend(); say('bad', 'Add a subject'); console.warn('[send] no subject'); return; }
+  const att = mail.file ? mail.file.name : mail.attachCv && mail.cfg.cv ? mail.cfg.cv.filename : 'no attachment';
+  // Inline confirm: browsers can silently block confirm() dialogs, which made Send look dead.
+  if (!sendArmed) {
+    let left = CONFIRM_SECONDS;
+    const label = () => { $('mSend').textContent = `Confirm send \u00b7 ${left}s`; };
+    sendArmed = setTimeout(() => disarmSend(`not confirmed within ${CONFIRM_SECONDS} s`), CONFIRM_SECONDS * 1000);
+    armTick = setInterval(() => { left--; label(); }, 1000);
+    label(); $('mSend').classList.add('arm');
+    say('', `Send to ${to.join(', ')}${cc.length ? ' (cc ' + cc.join(', ') + ')' : ''} with ${att}? Click "Confirm send".`);
+    console.info(`[send] armed: click "Confirm send" within ${CONFIRM_SECONDS} s to send`);
+    return;
+  }
+  disarmSend();
+  $('mSend').disabled = true; say('', 'Sending\u2026');
+  const t0 = performance.now();
+  try {
+    const body = {
+      post_id: mail.post.id, to, cc, subject,
+      html: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1f2328">${$('mBody').innerHTML}</div>`,
+      text: $('mBody').innerText, attach_cv: mail.attachCv,
+      attachment: mail.file ? { filename: mail.file.name, data: await fileB64(mail.file) } : null,
+    };
+    console.info('[send] POST /api/send', { to, cc, subject, attach_cv: body.attach_cv, attachment: body.attachment && body.attachment.filename });
+    const r = await api('/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r) { console.warn('[send] no response (signed out?)'); say('bad', 'Not sent: session expired, sign in again'); return; }
+    console.info(`[send] sent in ${Math.round(performance.now() - t0)} ms`, r);
+    mail.dirty = false;
+    mail.post.sent = [{ to_addrs: to, subject, status: 'sent', sent_at: r.sent_at }, ...(mail.post.sent || [])];
+    renderMailNote();
+    $('mStatus').className = 'ok'; $('mStatus').textContent = `Sent \u2713 ${cairoTime(r.sent_at)} Cairo${r.attachment ? ' with ' + r.attachment : ''}`;
+    if (!r.logged) { console.error('[compose] email sent but not logged to the DB'); $('mStatus').textContent += ' (not saved to the log; see server logs)'; }
+    loadPosts().catch(e => console.error(e));
+  } catch (e) {
+    console.error('[compose] send failed:', e);
+    let msg = e.message; try { msg = JSON.parse(msg.replace(/^\d+ /, '')).detail || msg; } catch {}
+    $('mStatus').className = 'bad'; $('mStatus').textContent = 'Not sent: ' + msg;
+    api(`/api/posts/${mail.post.id}`).then(p => { if (p && mail.post && p.id === mail.post.id) { mail.post.sent = p.sent; renderMailNote(); } }).catch(() => {});
+  } finally {
+    $('mSend').disabled = !mail.cfg.configured || !mail.cfg.allowed;
+  }
+};
+
+const REPO = 'https://github.com/m86hussein/linkedin-jobs-scraper';
+async function loadMe() {
+  const d = await api('/api/me'); if (!d) return;
+  $('userEmail').textContent = d.email;
+  const b = d.build || {};
+  const link = (href, text) => el('a', { href, target: '_blank', rel: 'noopener noreferrer', textContent: text });
+  const sha = /^[0-9a-f]{40}$/.test(b.sha || '') ? b.sha : null;
+  const parts = ['build ', sha ? link(`${REPO}/commit/${sha}`, sha.slice(0, 7)) : 'local', b.dirty ? '+dirty' : ''];
+  if (/^\d+$/.test(b.run_id || '')) parts.push(' · run ', link(`${REPO}/actions/runs/${b.run_id}`, b.run_id));
+  const when = [];
+  if (b.deployed_at) when.push(cairoTime(b.deployed_at) + ' Cairo ',
+    el('span', { className: 'since', textContent: `(${since(b.deployed_at)})` }));
+  if (loadedSha && sha && sha !== loadedSha) {
+    const reload = el('a', { href: '#', textContent: 'new build — reload', className: 'newbuild' });
+    reload.onclick = e => { e.preventDefault(); location.reload(); };
+    when.push(' ', reload);
+  }
+  loadedSha = loadedSha || sha;
+  buildAt = b.deployed_at;
+  $('build').replaceChildren(el('div', {}, ...parts), when.length ? el('div', {}, ...when) : '');
+}
+
+let loadedSha = null, buildAt = null;
+function since(t) {
+  const s = Math.max(0, Math.round((Date.now() - new Date(t)) / 1000));
+  const unit = (n, w) => `${n} ${w}${n === 1 ? '' : 's'} ago`;
+  return s < 45 ? 'just now' : s < 3600 ? unit(Math.max(1, Math.round(s / 60)), 'minute')
+       : s < 86400 ? unit(Math.round(s / 3600), 'hour') : unit(Math.round(s / 86400), 'day');
+}
+setInterval(() => { const e = document.querySelector('#build .since'); if (e && buildAt) e.textContent = `(${since(buildAt)})`; }, 30000);
+
+async function control(action) {
+  if (action === 'start' && !confirm('Start the LinkedIn scraper?')) return;
+  $('startBtn').disabled = $('testBtn').disabled = $('stopBtn').disabled = true;
+  try { await api('/api/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) }); }
+  catch (e) { console.error(`[control] ${action} failed:`, e); alert(e.message); }
+  await Promise.all([loadStatus(), loadEvents()]);
+}
+
+$('startBtn').onclick = () => control('start');
+$('testBtn').onclick = () => control('test');
+$('nowBtn').onclick = () => control('now');
+$('stopBtn').onclick = () => control('stop');
+let t; $('q').oninput = () => { clearTimeout(t); t = setTimeout(loadPosts, 300); };
+$('hiringOnly').onchange = reloadFiltered;
+$('ksaOnly').onchange = reloadFiltered;
+$('myRoles').onchange = reloadFiltered;
+$('freqOnly').checked = localStorage.getItem('freqOnly') === '1';
+$('freqOnly').onchange = () => { localStorage.setItem('freqOnly', $('freqOnly').checked ? '1' : ''); renderPosts(); };
+$('saudiFilter').value = localStorage.getItem('saudiFilter') || 'all';
+$('saudiFilter').onchange = () => { localStorage.setItem('saudiFilter', $('saudiFilter').value); reloadFiltered(); };
+$('egFilter').value = localStorage.getItem('egFilter') || 'all';
+$('egFilter').onchange = () => { localStorage.setItem('egFilter', $('egFilter').value); reloadFiltered(); };
+$('srcFilter').value = localStorage.getItem('srcFilter') || 'all';
+$('srcFilter').onchange = () => { localStorage.setItem('srcFilter', $('srcFilter').value); reloadFiltered(); };
+
+const safe = f => () => f().catch(e => console.error(e));
+
+function setSidebar(hidden) {
+  document.body.classList.toggle('sidebar-hidden', hidden);
+  $('sidebarBtn').textContent = hidden ? '▸ Show panel' : '◂ Hide panel';
+  $('sidebarBtn').setAttribute('aria-expanded', String(!hidden));
+  localStorage.setItem('sidebarHidden', hidden ? '1' : '0');
+}
+setSidebar(localStorage.getItem('sidebarHidden') === '1');
+$('sidebarBtn').onclick = () => setSidebar(!document.body.classList.contains('sidebar-hidden'));
+
+document.querySelectorAll('.card').forEach(card => {
+  const h = card.querySelector(':scope > h2');
+  const key = 'panel:' + (card.dataset.panel || h.textContent.trim().toLowerCase());
+  const saved = localStorage.getItem(key);
+  if (saved !== null) card.classList.toggle('collapsed', saved === '1');
+  h.title = 'Click to collapse/expand';
+  h.onclick = () => localStorage.setItem(key, card.classList.toggle('collapsed') ? '1' : '0');
+});
+[loadMe, loadStatus, loadEvents, loadPosts].forEach(f => safe(f)());
+setInterval(safe(loadStatus), 5000);
+setInterval(safe(loadMe), 60000);
+setInterval(safe(loadEvents), 10000);
+// Not on the Compose tab: rebuilding the list stalls the page ~1 s, which can swallow a Send click.
+setInterval(safe(async () => { if (!document.body.classList.contains('tab-compose')) await loadPosts(); }), 30000);
+</script>
+</body>
+</html>

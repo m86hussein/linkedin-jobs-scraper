@@ -1,0 +1,19 @@
+[Unit]
+Description=oauth2-proxy for LinkedIn Jobs Scraper
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=oauth2proxy
+Group=oauth2proxy
+ExecStart=/usr/local/bin/oauth2-proxy --config=/etc/oauth2-proxy/jobsscrap.cfg
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/etc/oauth2-proxy
+
+[Install]
+WantedBy=multi-user.target

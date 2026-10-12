@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+*.log
+agent/raw/
+agent/config.local.json
+agent/.db_password

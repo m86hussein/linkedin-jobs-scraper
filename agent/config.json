@@ -1,0 +1,138 @@
+{
+  "queries": [
+    "hiring solution architect remote",
+    "hiring cloud architect",
+    "AI engineer hiring",
+    "head of engineering hiring",
+    "product manager hiring remote"
+  ],
+  "date_posted": "past-month",
+  "max_pages": 5,
+  "gap_seconds": [
+    60,
+    180
+  ],
+  "test_gap_seconds": [
+    30,
+    60
+  ],
+  "cycle_every_hours": 8,
+  "cycle_jitter_minutes": 45,
+  "max_searches_per_day": 40,
+  "searches_per_cycle": 20,
+  "feed_browse": {
+    "every_minutes": [
+      35,
+      110
+    ],
+    "posts": [
+      5,
+      25
+    ],
+    "between_searches_chance": 0.25,
+    "roles": [
+      "\\b(solutions?|cloud|enterprise|AI|data|software|azure|integration|technical|technology|platform|ML|GenAI|digital|IT|security|infrastructure)\\s+(\\w+\\s+)?architect",
+      "\\bAI\\b",
+      "artificial intelligence",
+      "generative",
+      "\\bGenAI\\b",
+      "\\bLLMs?\\b",
+      "machine learning",
+      "\\bCTO\\b",
+      "chief (technology|digital|AI|data|innovation|information)",
+      "head of (AI|technology|digital|data|innovation|engineering|IT\\b|transformation)",
+      "\\b(AI|technology|digital|IT|data|innovation|engineering|transformation) director",
+      "director,? (of )?(AI|technology|digital|IT\\b|data|innovation|engineering|transformation)",
+      "digital transformation",
+      "(AI|digital|technology|innovation) strateg",
+      "\\bproduct (manager|owner|lead|director)",
+      "head of product",
+      "chief product",
+      "\\bCPO\\b",
+      "\\b(project|program|programme|delivery|portfolio)\\s+(manager|director|lead|head)",
+      "\\bPMO\\b",
+      "\\bimplementation\\s+(lead|manager|director|head|consultant|specialist|architect)",
+      "forward deployed",
+      "azure",
+      "telecom",
+      "conversational",
+      "\\b(CCaaS|CPaaS|UCaaS)\\b",
+      "unified communications",
+      "(contact|call) cent(er|re)",
+      "\\bIVR\\b",
+      "\\b(Genesys|Amazon Connect|Twilio|Infobip|Five9|NICE CXone)\\b",
+      "strategy consult",
+      "chatbot",
+      "voicebot",
+      "\\bSaaS\\b.{0,40}\\b(architect|CTO|head|director|lead|presales|pre-sales)\\b",
+      "\\b(AI|technology|tech|digital|IT|cloud|data|transformation|strategy|innovation)\\s+(senior\\s+)?(advisor|adviser|advisory|consultant)",
+      "\\b(part[- ]time|fractional|freelance|contract)\\b.{0,40}\\b(AI|CTO|architect|advisor|adviser|consultant)\\b"
+    ]
+  },
+  "profile_visits": {
+    "between_searches_chance": 0.35,
+    "max_per_day": 10,
+    "revisit_days": 14,
+    "max_age_days": 30,
+    "max_scrolls": [
+      1,
+      3
+    ]
+  },
+  "job_details": {
+    "between_searches_chance": 0.2,
+    "idle_chance": 0.4,
+    "max_per_day": 25
+  },
+  "recruiter_search": {
+    "between_searches_chance": 0.15,
+    "max_per_day": 4,
+    "queries": [
+      "technical recruiter",
+      "tech talent acquisition",
+      "executive search technology"
+    ],
+    "headline": "recruit|talent|head ?hunt|staffing|executive search|sourcing|hiring",
+    "locations": "remote|london|berlin|dubai"
+  },
+  "title_model": {
+    "model": "global.anthropic.claude-haiku-5-5",
+    "aws_region": "us-east-1",
+    "batch": 20
+  },
+  "telegram": {
+    "channels": [],
+    "every_minutes": 60,
+    "first_pages": 5,
+    "max_age_days": 30,
+    "arabic_roles": ""
+  },
+  "match_criteria": "Describe the roles you want here, in plain language: seniority, role families, industries to include or exclude, and acceptable locations / remote / visa conditions. The model uses this text to decide whether a hiring post is a fit.",
+  "active_hours": [
+    8,
+    23
+  ],
+  "timezone": "UTC",
+  "mcp_server": [
+    "uvx",
+    "mcp-server-linkedin==4.26.0",
+    "--tool-timeout",
+    "420",
+    "--no-auto-import",
+    "--login-inline-wait",
+    "0"
+  ],
+  "ssh": {
+    "host": "ubuntu@your-server.example.com",
+    "key": "~/.ssh/id_ed25519",
+    "local_port": 15432
+  },
+  "linkedin_account": "",
+  "db": {
+    "dbname": "appdb",
+    "user": "linkedin_scraper",
+    "aws_profile": "default",
+    "aws_region": "us-east-1",
+    "secret_id": "linkedin-scraper/db-password"
+  }
+}

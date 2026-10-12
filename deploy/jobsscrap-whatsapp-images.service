@@ -1,0 +1,25 @@
+[Unit]
+Description=LinkedIn post screenshots from WhatsApp -> jobs DB
+After=network-online.target postgresql.service whatsapp-bridge.service
+Wants=network-online.target
+
+[Service]
+# ubuntu owns the WhatsApp bridge store under /home/ubuntu.
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/jobsscrap/whatsapp
+EnvironmentFile=/etc/jobsscrap/env
+# Set WATCH_PHONE (international format, digits only) in /etc/jobsscrap/env
+Environment=PYTHONUNBUFFERED=1
+# Skip ~ubuntu/.aws (root keys); use the instance role, which only allows Haiku on Bedrock.
+Environment=AWS_SHARED_CREDENTIALS_FILE=/dev/null AWS_CONFIG_FILE=/dev/null
+ExecStart=/opt/jobsscrap/venv/bin/python linkedin_images.py
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target
